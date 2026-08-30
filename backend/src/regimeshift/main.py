@@ -45,8 +45,7 @@ def health(settings: SettingsDependency) -> dict[str, str | bool]:
     }
 
 
-@app.get("/api/v1/snapshot", response_model=DecisionSnapshot)
-def snapshot(pipeline: PipelineDependency, symbol: str = "SPY") -> DecisionSnapshot:
+def _analyze(pipeline: DecisionPipeline, symbol: str) -> DecisionSnapshot:
     try:
         return pipeline.analyze(symbol.upper())
     except (KeyError, ValueError) as error:
@@ -57,6 +56,11 @@ def snapshot(pipeline: PipelineDependency, symbol: str = "SPY") -> DecisionSnaps
         ) from error
 
 
+@app.get("/api/v1/snapshot", response_model=DecisionSnapshot)
+def snapshot(pipeline: PipelineDependency, symbol: str = "SPY") -> DecisionSnapshot:
+    return _analyze(pipeline, symbol)
+
+
 @app.post("/api/v1/analyze", response_model=DecisionSnapshot)
 def analyze(request: AnalyzeRequest, pipeline: PipelineDependency) -> DecisionSnapshot:
-    return snapshot(pipeline, request.symbol)
+    return _analyze(pipeline, request.symbol)

@@ -11,7 +11,8 @@ export async function fetchSnapshot(symbol = "SPY"): Promise<DecisionSnapshot> {
     });
     if (!response.ok) throw new Error(`Regime API returned ${response.status}`);
     return (await response.json()) as DecisionSnapshot;
-  } catch {
+  } catch (error) {
+    console.warn("Regime API unreachable, serving offline demo snapshot:", error);
     const demo = getDemoSnapshot();
     demo.market.symbol = symbol;
     return demo;
