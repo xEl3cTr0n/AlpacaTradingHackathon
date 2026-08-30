@@ -4,12 +4,14 @@ from uuid import uuid4
 from regimeshift.config import Settings
 from regimeshift.domain.models import (
     AgentVerdict,
+    AnalysisControls,
     DecisionSnapshot,
     Direction,
     MarketContext,
     RegimeAssessment,
     RiskDecision,
     Stance,
+    StrategyMode,
     StrategyName,
     StrategyProposal,
     Volatility,
@@ -24,15 +26,16 @@ class DecisionPipeline:
         self.market_data = market_data
         self.regime_engine = RegimeEngine()
 
-    def analyze(self, symbol: str) -> DecisionSnapshot:
+    def analyze(self, symbol: str, controls: AnalysisControls | None = None) -> DecisionSnapshot:
+        controls = controls or AnalysisControls(max_risk_pct=self.settings.max_risk_per_trade_pct)
         market = self.market_data.get_context(symbol)
         regime = self.regime_engine.assess(market.prices)
         technical = self._technical_agent(regime)
         research = self._research_agent(market)
         bull = self._bull_agent(regime, research)
         bear = self._bear_agent(regime, research)
-        strategy = self._select_strategy(regime)
-        risk = self._risk_gate(regime, strategy, bull, bear)
+        strategy = self._select_strategy(regime, controls)
+        risk = self._risk_gate(regime, strategy, bull, bear, controls)
         strategy.status = "approved preview" if risk.approved else "vetoed"
 
         return DecisionSnapshot(
@@ -44,6 +47,7 @@ class DecisionPipeline:
             agents=[technical, research, bull, bear, self._risk_verdict(risk)],
             strategy=strategy,
             risk=risk,
+            controls=controls,
         )
 
     def _technical_agent(self, regime: RegimeAssessment) -> AgentVerdict:
@@ -117,19 +121,29 @@ class DecisionPipeline:
             ],
         )
 
-    def _select_strategy(self, regime: RegimeAssessment) -> StrategyProposal:
-        account_risk = self.settings.account_equity * self.settings.max_risk_per_trade_pct
-        if regime.direction == Direction.BULLISH:
+    def _select_strategy(
+        self, regime: RegimeAssessment, controls: AnalysisControls
+    ) -> StrategyProposal:
+        account_risk = self.settings.account_equity * controls.max_risk_pct
+        effective_direction = regime.direction
+        if controls.strategy_mode == StrategyMode.BULLISH:
+            effective_direction = Direction.BULLISH
+        elif controls.strategy_mode == StrategyMode.BEARISH:
+            effective_direction = Direction.BEARISH
+        elif controls.strategy_mode == StrategyMode.NEUTRAL:
+            effective_direction = Direction.SIDEWAYS
+
+        if effective_direction == Direction.BULLISH:
             name = StrategyName.BULL_CALL_SPREAD
             display = "Bull call debit spread"
             structure = ["Buy call near 0.55 delta", "Sell higher-strike call near 0.30 delta"]
             thesis = "Participate in upside momentum while capping premium at risk."
-        elif regime.direction == Direction.BEARISH:
+        elif effective_direction == Direction.BEARISH:
             name = StrategyName.BEAR_PUT_SPREAD
             display = "Bear put debit spread"
             structure = ["Buy put near -0.55 delta", "Sell lower-strike put near -0.30 delta"]
             thesis = "Express downside momentum with a predefined maximum loss."
-        elif regime.volatility == Volatility.HIGH:
+        elif regime.volatility == Volatility.HIGH or controls.strategy_mode == StrategyMode.NEUTRAL:
             name = StrategyName.IRON_CONDOR
             display = "Defined-risk iron condor"
             structure = [
@@ -152,6 +166,16 @@ class DecisionPipeline:
             max_loss_dollars=max_loss,
             risk_percent=max_loss / self.settings.account_equity,
             status="pending risk review",
+            entry_rules=[
+                f"Regime confidence at least {controls.min_confidence:.0%}",
+                f"Target expiration near {controls.target_dte} DTE",
+                "Bid/ask spread and open-interest liquidity checks pass",
+            ],
+            exit_rules=[
+                "Take profit at 50% of maximum reward",
+                "Exit at 75% of maximum loss",
+                "Close or reduce when the detected regime changes",
+            ],
         )
 
     def _risk_gate(
@@ -160,8 +184,9 @@ class DecisionPipeline:
         strategy: StrategyProposal,
         bull: AgentVerdict,
         bear: AgentVerdict,
+        controls: AnalysisControls,
     ) -> RiskDecision:
-        max_allowed = self.settings.account_equity * self.settings.max_risk_per_trade_pct
+        max_allowed = self.settings.account_equity * controls.max_risk_pct
         reasons: list[str] = []
         approved = True
         if strategy.name == StrategyName.NO_TRADE:
@@ -170,9 +195,12 @@ class DecisionPipeline:
         if strategy.max_loss_dollars > max_allowed:
             approved = False
             reasons.append("Preview loss exceeds the account risk budget")
-        if regime.confidence < 0.55:
+        if regime.confidence < controls.min_confidence:
             approved = False
-            reasons.append("Regime confidence is below the 55% authorization threshold")
+            reasons.append(
+                "Regime confidence is below the "
+                f"{controls.min_confidence:.0%} authorization threshold"
+            )
         if bear.confidence > bull.confidence + 0.15:
             approved = False
             reasons.append("Bear case materially outweighs the Bull case")

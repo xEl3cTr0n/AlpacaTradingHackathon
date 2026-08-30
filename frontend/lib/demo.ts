@@ -1,4 +1,4 @@
-import type { DecisionSnapshot, PricePoint } from "@/lib/types";
+import type { DecisionSnapshot, PlatformSnapshot, PricePoint } from "@/lib/types";
 
 function demoPrices(): PricePoint[] {
   const start = Date.UTC(2026, 4, 21);
@@ -89,6 +89,16 @@ export function getDemoSnapshot(): DecisionSnapshot {
       max_loss_dollars: 650,
       risk_percent: 0.0065,
       status: "approved preview",
+      entry_rules: [
+        "Regime confidence at least 55%",
+        "Target expiration near 30 DTE",
+        "Bid/ask spread and open-interest liquidity checks pass",
+      ],
+      exit_rules: [
+        "Take profit at 50% of maximum reward",
+        "Exit at 75% of maximum loss",
+        "Close or reduce when the detected regime changes",
+      ],
     },
     risk: {
       approved: true,
@@ -100,7 +110,62 @@ export function getDemoSnapshot(): DecisionSnapshot {
         "Execution remains preview-only until contract quotes are resolved",
       ],
     },
+    controls: {
+      strategy_mode: "adaptive",
+      max_risk_pct: 0.01,
+      min_confidence: 0.55,
+      target_dte: 30,
+    },
     disclaimer: "Educational paper-trading prototype. Not investment advice.",
   };
 }
 
+export function getDemoPlatform(): PlatformSnapshot {
+  const now = Date.now();
+  const equity_curve = Array.from({ length: 31 }, (_, index) => {
+    const equity = 100_000 + index * 112 + Math.sin(index / 2.8) * 460;
+    return {
+      timestamp: new Date(now - (30 - index) * 86_400_000).toISOString(),
+      equity: Number(equity.toFixed(2)),
+      profit_loss: Number((equity - 100_000).toFixed(2)),
+    };
+  });
+  return {
+    mode: "offline demo",
+    account: {
+      equity: 103_842.17,
+      cash: 77_406.32,
+      buying_power: 154_812.64,
+      day_pnl: 184.72,
+      day_pnl_pct: 0.0018,
+      total_pnl: 3_842.17,
+      total_pnl_pct: 0.0384,
+      options_buying_power: 61_925.06,
+      options_level: 3,
+      trading_blocked: false,
+    },
+    equity_curve,
+    positions: [
+      { symbol: "SPY", asset_class: "us_equity", quantity: 12, market_value: 6902.64, average_entry: 566.1, current_price: 575.22, unrealized_pnl: 109.44, unrealized_pnl_pct: 0.0161 },
+      { symbol: "QQQ", asset_class: "us_equity", quantity: 8, market_value: 4058.4, average_entry: 498.7, current_price: 507.3, unrealized_pnl: 68.8, unrealized_pnl_pct: 0.0172 },
+      { symbol: "SPY260918C00580000", asset_class: "us_option", quantity: 1, market_value: 642, average_entry: 5.75, current_price: 6.42, unrealized_pnl: 67, unrealized_pnl_pct: 0.1165 },
+    ],
+    orders: [
+      { id: "demo-ord-1", symbol: "SPY260918C00580000", side: "buy", quantity: 1, order_type: "limit", status: "filled", submitted_at: new Date(now - 11_880_000).toISOString() },
+      { id: "demo-ord-2", symbol: "SPY260918C00590000", side: "sell", quantity: 1, order_type: "limit", status: "filled", submitted_at: new Date(now - 11_880_000).toISOString() },
+      { id: "demo-ord-3", symbol: "QQQ", side: "buy", quantity: 8, order_type: "market", status: "filled", submitted_at: new Date(now - 93_600_000).toISOString() },
+    ],
+    integrations: [
+      { id: "trading-api", name: "Alpaca Trading API", status: "setup_required", detail: "Add paper credentials to the root .env", capability: "paper account, portfolio, orders, news, and market data" },
+      { id: "mcp", name: "Alpaca MCP Server", status: "not_connected", detail: "Enable after configuring the Alpaca MCP server", capability: "agent-native account, news, and options tools" },
+      { id: "cli", name: "Alpaca CLI", status: "not_connected", detail: "Use for operator inspection and reproducible demos", capability: "terminal account and order inspection" },
+    ],
+    activity: [
+      { timestamp: new Date(now - 120_000).toISOString(), source: "Risk", title: "Trade preview approved", detail: "Maximum modeled loss is inside the 1% account budget.", status: "success" },
+      { timestamp: new Date(now - 180_000).toISOString(), source: "Bear", title: "Counter-thesis completed", detail: "Whipsaw risk remains below the veto threshold.", status: "complete" },
+      { timestamp: new Date(now - 240_000).toISOString(), source: "Technical", title: "Regime classified", detail: "Bullish direction with normal volatility confidence.", status: "complete" },
+      { timestamp: new Date(now - 300_000).toISOString(), source: "API", title: "Market snapshot received", detail: "Bars, news, and option telemetry normalized.", status: "complete" },
+    ],
+    generated_at: new Date(now).toISOString(),
+  };
+}

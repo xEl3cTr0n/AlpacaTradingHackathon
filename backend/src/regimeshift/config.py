@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     alpaca_secret_key: SecretStr = SecretStr("")
     alpaca_paper: bool = True
     enable_paper_orders: bool = False
+    alpaca_mcp_enabled: bool = False
+    alpaca_cli_enabled: bool = False
     default_symbol: str = "SPY"
     account_equity: float = 100_000.0
     max_risk_per_trade_pct: float = 0.01
