@@ -74,7 +74,7 @@ export function StrategyLab({ snapshot, onSnapshot }: { snapshot: DecisionSnapsh
           <p>{snapshot.swing.rationale}</p>
         </article>
         <article className="panel council-panel">
-          <div className="panel-heading"><div><p className="eyebrow">Deterministic consensus</p><h2>5-agent vote</h2></div><strong>{pct(snapshot.council.weighted_support)}</strong></div>
+          <div className="panel-heading"><div><p className="eyebrow">Deterministic consensus</p><h2>6-agent vote</h2></div><strong>{pct(snapshot.council.weighted_support)}</strong></div>
           <div className="vote-summary"><span className="support">{snapshot.council.support_count} support</span><span className="oppose">{snapshot.council.oppose_count} oppose</span><span className="abstain">{snapshot.council.abstain_count} abstain</span></div>
           <ul>{snapshot.council.votes.map((vote) => <li key={vote.agent}><strong>{vote.agent}</strong><span className={`vote-chip ${vote.vote}`}>{vote.vote}</span><small>{pct(vote.confidence)}</small></li>)}</ul>
         </article>
@@ -113,6 +113,23 @@ export function StrategyLab({ snapshot, onSnapshot }: { snapshot: DecisionSnapsh
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="panel microstructure-panel" aria-labelledby="microstructure-title">
+        <div className="panel-heading">
+          <div><p className="eyebrow">Professor framework · Alpaca chain</p><h2 id="microstructure-title">Options body language</h2></div>
+          <span className={`rotation-signal ${snapshot.options_microstructure.gamma_regime === "amplifying" ? "defensive" : snapshot.options_microstructure.gamma_regime === "stabilizing" ? "risk_on" : "mixed"}`}>{snapshot.options_microstructure.gamma_regime}</span>
+        </div>
+        <div className="microstructure-grid">
+          <div><span>Net GEX</span><strong>{snapshot.options_microstructure.net_gex.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
+          <div><span>Gamma concentration</span><strong>{snapshot.options_microstructure.gamma_concentration == null ? "N/A" : pct(snapshot.options_microstructure.gamma_concentration)}</strong></div>
+          <div><span>Call wall</span><strong>{snapshot.options_microstructure.call_wall?.toFixed(0) ?? "N/A"}</strong></div>
+          <div><span>Put wall</span><strong>{snapshot.options_microstructure.put_wall?.toFixed(0) ?? "N/A"}</strong></div>
+          <div><span>Chain quality</span><strong>{pct(snapshot.options_microstructure.data_quality)}</strong></div>
+          <div><span>Contracts</span><strong>{snapshot.options_microstructure.contract_count}</strong></div>
+        </div>
+        <p className="rotation-rationale">{snapshot.options_microstructure.rationale}</p>
+        <small className="microstructure-source">{snapshot.options_microstructure.source}. GEX is a dealer-position proxy; GEX+, GIV, CR(x), GRIP, and REPH remain off until their required inputs/formulas are available.</small>
       </section>
 
       <section className="section-block"><div className="section-heading"><div><p className="eyebrow">Adversarial review</p><h2>Agent council</h2></div><p>Independent evidence, thesis, counter-thesis, and deterministic authorization.</p></div><div className="agent-grid">{snapshot.agents.map((agent) => <AgentCard key={agent.agent} verdict={agent} />)}</div></section>

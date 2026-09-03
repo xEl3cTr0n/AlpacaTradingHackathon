@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     alpaca_paper: bool = True
     enable_paper_orders: bool = False
     enable_exploration_orders: bool = False
+    enable_manual_paper_orders: bool = False
+    manual_trade_token: SecretStr = SecretStr("")
     alpaca_mcp_enabled: bool = False
     alpaca_cli_enabled: bool = False
     default_symbol: str = "SPY"
@@ -31,6 +33,15 @@ class Settings(BaseSettings):
     @property
     def alpaca_configured(self) -> bool:
         return bool(self.alpaca_api_key and self.alpaca_secret_key.get_secret_value())
+
+    @property
+    def manual_trading_configured(self) -> bool:
+        return bool(
+            self.enable_manual_paper_orders
+            and self.manual_trade_token.get_secret_value()
+            and self.alpaca_configured
+            and self.alpaca_paper
+        )
 
 
 @lru_cache

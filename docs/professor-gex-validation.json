@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-09-03T11:56:43.297628-07:00",
+  "source": "GEX_NN_Copy.xlsm cached Results1 values supplied by Ninh D. Nguyen, Ph.D.",
+  "period": {
+    "start": "2005-01-03",
+    "end": "2026-02-06",
+    "observations": 5308,
+    "chronological_split": 3715
+  },
+  "target": "5-session forward RMS daily log return",
+  "correlations": {
+    "full": { "gex": -0.4427, "gex_plus": -0.4869, "giv": 0.519, "crx": 0.4882 },
+    "train_70pct": { "gex": -0.4393, "gex_plus": -0.4958, "giv": 0.5107, "crx": 0.4672 },
+    "holdout_30pct": { "gex": -0.4814, "gex_plus": -0.4933, "giv": 0.5734, "crx": 0.5893 }
+  },
+  "gex_sign_regime": {
+    "negative_days": 2066,
+    "positive_days": 3242,
+    "negative_avg_rv5": 0.013324,
+    "positive_avg_rv5": 0.006889,
+    "negative_to_positive_vol_ratio": 1.934
+  },
+  "limitations": [
+    "Uses workbook-produced metrics; it does not independently recompute Greeks or GEX.",
+    "Cached workbook outputs may include methodology not visible in this repository.",
+    "No option fills, slippage, or strategy P&L are modeled.",
+    "GEX describes expected volatility structure, not price direction."
+  ]
+}

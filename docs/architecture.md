@@ -6,9 +6,10 @@
 MarketDataProvider
   -> LargeCapScanner (24 names, completed 15-minute 18 EMA cross + daily context)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
-  -> Technical + Swing + Research + Rotation evidence
+  -> Alpaca option chain + contract OI -> GEX / GMC microstructure evidence
+  -> Technical + Microstructure + Swing + Research + Rotation evidence
   -> Bull + Bear adversarial theses
-  -> VotingCouncil (5 deterministic proposal-relative votes)
+  -> VotingCouncil (6 deterministic proposal-relative votes)
   -> StrategyPolicy
   -> RiskGate (approve / $200 exploration resize / veto)
   -> DecisionSnapshot audit record
@@ -34,12 +35,14 @@ state and require confirmation across observations before switching regimes.
 The official Alpaca MCP server exposes read-only account, stock, option, and
 news tools to Claude and Gemini. Trading tools are intentionally excluded so an
 LLM cannot bypass policy. The official Alpaca CLI is pinned separately and is
-the only command path used by the autonomous execution runner.
+the only command path used by the autonomous execution runner. A separate
+operator-token-protected API path supports manual paper MLeg orders; it is
+disabled by default and hard-codes the paper client.
 
 `ENABLE_PAPER_ORDERS` defaults to false. A CLI submission additionally requires
 the runner's explicit `--execute` flag and all of these conditions:
 
-1. The 5-agent council approves the proposed direction.
+1. The 6-agent council approves the proposed direction.
 2. The separate deterministic Risk gate approves it.
 3. The signal is either a validated SPY swing breakout or a scanner-qualified
    18 EMA cross with trend, market, relative-strength, and volume confirmation.
@@ -49,6 +52,13 @@ the runner's explicit `--execute` flag and all of these conditions:
    a 50-contract open-interest floor pass.
 6. Quoted maximum loss is inside the account risk budget.
 7. `ALPACA_LIVE_TRADE=false` is injected by code and cannot be overridden.
+
+Live GEX uses the supplied paper's explicit convention (+calls, -puts) over a
+bounded 0–45 DTE, 85–115% moneyness chain. It joins Alpaca snapshot Greeks to
+contract open interest and records data quality and the dealer-position
+assumption. GEX is volatility/structure evidence, not a standalone direction
+signal. Missing data abstains in the council and vetoes production authorization;
+negative gamma imposes a $200 cap, while high GMC requires a confirmed breakout.
 
 The scheduled worker evaluates every qualified scanner candidate through the
 council rather than stopping at the first veto. The backtested daily production

@@ -11,6 +11,7 @@ from regimeshift.domain.models import (
     Direction,
     InstrumentMode,
     MarketContext,
+    OptionsMicrostructureAssessment,
     RegimeAssessment,
     RiskDecision,
     RotationSignal,
@@ -28,6 +29,7 @@ from regimeshift.domain.regime import RegimeEngine
 from regimeshift.domain.sector_rotation import SECTOR_UNIVERSE, SectorRotationEngine
 from regimeshift.domain.swing import SwingEngine
 from regimeshift.services.market_data import MarketDataProvider
+from regimeshift.services.options_data import build_options_provider
 
 INDEX_OPTION_PROXIES = {"SPY": "XSP"}
 
@@ -40,6 +42,7 @@ class DecisionPipeline:
         self.rotation_engine = SectorRotationEngine()
         self.swing_engine = SwingEngine()
         self.voting_council = VotingCouncil()
+        self.options_provider = build_options_provider(settings)
 
     def analyze(self, symbol: str, controls: AnalysisControls | None = None) -> DecisionSnapshot:
         controls = controls or AnalysisControls(max_risk_pct=self.settings.max_risk_per_trade_pct)
@@ -50,7 +53,11 @@ class DecisionPipeline:
         rotation = self.rotation_engine.assess(
             self.market_data.get_price_history(rotation_symbols)
         )
+        microstructure = self.options_provider.get_assessment(
+            market.symbol, market.current_price
+        )
         technical = self._technical_agent(regime)
+        microstructure_agent = self._microstructure_agent(microstructure)
         swing_agent = self._swing_agent(swing)
         research = self._research_agent(market)
         rotation_agent = self._rotation_agent(rotation)
@@ -65,9 +72,12 @@ class DecisionPipeline:
             research,
             bull,
             bear,
+            microstructure,
             threshold=0.52,
         )
-        risk = self._risk_gate(regime, swing, strategy, bull, bear, council, controls)
+        risk = self._risk_gate(
+            regime, swing, microstructure, strategy, bull, bear, council, controls
+        )
         strategy.status = "paper candidate" if risk.approved else "vetoed"
 
         return DecisionSnapshot(
@@ -78,8 +88,10 @@ class DecisionPipeline:
             regime=regime,
             swing=swing,
             sector_rotation=rotation,
+            options_microstructure=microstructure,
             agents=[
                 technical,
+                microstructure_agent,
                 swing_agent,
                 research,
                 rotation_agent,
@@ -92,6 +104,24 @@ class DecisionPipeline:
             strategy=strategy,
             risk=risk,
             controls=controls,
+        )
+
+    @staticmethod
+    def _microstructure_agent(
+        assessment: OptionsMicrostructureAssessment,
+    ) -> AgentVerdict:
+        if assessment.status != "live":
+            stance = Stance.NEUTRAL
+        elif assessment.gamma_regime.value == "amplifying":
+            stance = Stance.OPPOSE
+        else:
+            stance = Stance.SUPPORT
+        return AgentVerdict(
+            agent="Microstructure",
+            stance=stance,
+            confidence=assessment.data_quality,
+            summary=assessment.rationale,
+            evidence=assessment.evidence,
         )
 
     def _technical_agent(self, regime: RegimeAssessment) -> AgentVerdict:
@@ -293,7 +323,8 @@ class DecisionPipeline:
             entry_rules=[
                 f"Regime confidence at least {controls.min_confidence:.0%}",
                 f"Swing signal: {swing.signal.value.replace('_', ' ')}",
-                "At least 3 of 5 deterministic council votes support the proposal",
+                "At least 3 of 6 deterministic council votes support the proposal",
+                "Live option-chain GEX must pass completeness and structure checks",
                 "Sector rotation must not materially oppose the directional thesis",
                 f"Target expiration near {controls.target_dte} DTE",
                 "Bid/ask spread and open-interest liquidity checks pass",
@@ -309,6 +340,7 @@ class DecisionPipeline:
         self,
         regime: RegimeAssessment,
         swing: SwingAssessment,
+        microstructure: OptionsMicrostructureAssessment,
         strategy: StrategyProposal,
         bull: AgentVerdict,
         bear: AgentVerdict,
@@ -326,6 +358,25 @@ class DecisionPipeline:
         if strategy.max_loss_dollars > max_allowed:
             approved = False
             reasons.append("Preview loss exceeds the account risk budget")
+        if self.settings.market_data_mode.lower() == "alpaca":
+            if microstructure.status != "live" or microstructure.data_quality < 0.6:
+                approved = False
+                reasons.append("Live GEX evidence is unavailable or below 60% data quality")
+            elif microstructure.gamma_regime.value == "amplifying":
+                max_allowed = min(max_allowed, 200.0)
+                if strategy.max_loss_dollars > max_allowed:
+                    approved = False
+                    reasons.append("Negative-gamma conditions cap maximum loss at $200")
+            elif (
+                microstructure.gamma_concentration is not None
+                and microstructure.gamma_concentration >= 0.6
+                and strategy.name
+                in {StrategyName.BULL_CALL_SPREAD, StrategyName.BEAR_PUT_SPREAD}
+                and swing.signal
+                not in {SwingSignal.BULLISH_BREAKOUT, SwingSignal.BEARISH_BREAKDOWN}
+            ):
+                approved = False
+                reasons.append("High gamma concentration requires a confirmed breakout")
         if regime.confidence < controls.min_confidence:
             approved = False
             reasons.append(
@@ -386,6 +437,12 @@ class DecisionPipeline:
 
     def _tool_evidence(self) -> list[ToolEvidence]:
         return [
+            ToolEvidence(
+                provider="Alpaca Options API",
+                capability="live Greeks, open interest, and GEX evidence",
+                status="used" if self.settings.alpaca_configured else "offline",
+                summary="Computes transparent GEX and gamma concentration from the bounded chain.",
+            ),
             ToolEvidence(
                 provider="Alpaca Trading API",
                 capability="market data and paper-account telemetry",

@@ -20,6 +20,7 @@ export function buildDecisionReceipt(snapshot: DecisionSnapshot) {
       regime: snapshot.regime,
       swing: snapshot.swing,
       sector_rotation: snapshot.sector_rotation,
+      options_microstructure: snapshot.options_microstructure,
       agents: snapshot.agents,
       council: snapshot.council,
       strategy: snapshot.strategy,

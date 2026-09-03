@@ -3,6 +3,8 @@ from regimeshift.domain.models import (
     CouncilDecision,
     CouncilVote,
     Direction,
+    GammaRegime,
+    OptionsMicrostructureAssessment,
     RegimeAssessment,
     RotationSignal,
     SectorRotationAssessment,
@@ -43,6 +45,7 @@ class VotingCouncil:
         research: AgentVerdict,
         bull: AgentVerdict,
         bear: AgentVerdict,
+        microstructure: OptionsMicrostructureAssessment,
         threshold: float = 0.56,
     ) -> CouncilDecision:
         direction = strategy_direction(strategy)
@@ -52,6 +55,7 @@ class VotingCouncil:
             self._rotation_vote(direction, rotation),
             self._research_vote(research),
             self._advocate_vote(direction, bull, bear),
+            self._microstructure_vote(strategy, microstructure),
         ]
         support = [vote for vote in votes if vote.vote == VoteChoice.SUPPORT]
         oppose = [vote for vote in votes if vote.vote == VoteChoice.OPPOSE]
@@ -78,6 +82,41 @@ class VotingCouncil:
             approval_threshold=threshold,
             quorum_met=quorum_met,
             approved=approved,
+        )
+
+    @staticmethod
+    def _microstructure_vote(
+        strategy: StrategyName, assessment: OptionsMicrostructureAssessment
+    ) -> CouncilVote:
+        if assessment.status != "live" or assessment.data_quality < 0.6:
+            return _vote(
+                "Microstructure",
+                VoteChoice.ABSTAIN,
+                max(0.1, assessment.data_quality),
+                assessment.rationale,
+            )
+        directional = strategy in {
+            StrategyName.BULL_CALL_SPREAD,
+            StrategyName.BEAR_PUT_SPREAD,
+        }
+        if strategy == StrategyName.IRON_CONDOR:
+            choice = (
+                VoteChoice.SUPPORT
+                if assessment.gamma_regime == GammaRegime.STABILIZING
+                and (assessment.gamma_concentration or 0) >= 0.5
+                else VoteChoice.OPPOSE
+            )
+        elif directional and assessment.gamma_regime == GammaRegime.AMPLIFYING:
+            choice = VoteChoice.SUPPORT
+        elif directional and (assessment.gamma_concentration or 0) >= 0.6:
+            choice = VoteChoice.OPPOSE
+        else:
+            choice = VoteChoice.ABSTAIN
+        return _vote(
+            "Microstructure",
+            choice,
+            assessment.data_quality,
+            assessment.rationale,
         )
 
     @staticmethod

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from regimeshift.config import Settings, get_settings
@@ -8,11 +8,15 @@ from regimeshift.domain.models import (
     AnalysisControls,
     AnalyzeRequest,
     DecisionSnapshot,
+    ManualTradePreview,
+    ManualTradeRequest,
+    ManualTradeResult,
     PlatformSnapshot,
     ScannerSnapshot,
 )
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.orchestration.pipeline import DecisionPipeline
+from regimeshift.services.manual_trading import ManualPaperTrader
 from regimeshift.services.market_data import build_market_data_provider
 from regimeshift.services.platform import build_platform_provider
 
@@ -26,7 +30,7 @@ app.add_middleware(
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Operator-Token"],
 )
 
 
@@ -50,6 +54,7 @@ def health(settings: SettingsDependency) -> dict[str, str | bool]:
         "mode": settings.market_data_mode,
         "alpaca_configured": settings.alpaca_configured,
         "paper_orders_enabled": settings.enable_paper_orders,
+        "manual_paper_orders_enabled": settings.manual_trading_configured,
     }
 
 
@@ -90,6 +95,36 @@ def platform(settings: SettingsDependency) -> PlatformSnapshot:
         raise HTTPException(
             status_code=502, detail=f"Paper account request failed: {error}"
         ) from error
+
+
+@app.post("/api/v1/manual-trades/preview", response_model=ManualTradePreview)
+def preview_manual_trade(
+    request: ManualTradeRequest, settings: SettingsDependency
+) -> ManualTradePreview:
+    try:
+        return ManualPaperTrader(settings).preview(request)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail=f"Option quote request failed: {error}"
+        ) from error
+
+
+@app.post("/api/v1/manual-trades/execute", response_model=ManualTradeResult)
+def execute_manual_trade(
+    request: ManualTradeRequest,
+    settings: SettingsDependency,
+    operator_token: Annotated[str, Header(alias="X-Operator-Token")],
+) -> ManualTradeResult:
+    try:
+        return ManualPaperTrader(settings).submit(request, operator_token)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Paper order failed: {error}") from error
 
 
 @app.get("/api/v1/scanner", response_model=ScannerSnapshot)

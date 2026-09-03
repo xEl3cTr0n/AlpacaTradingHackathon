@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   FlaskConical,
   LockKeyhole,
+  ListPlus,
   PanelLeftClose,
   Radio,
   ScanSearch,
@@ -20,17 +21,19 @@ import { useState } from "react";
 import { AgentOps } from "@/app/_components/agent-ops";
 import { BacktestView } from "@/app/_components/backtest-view";
 import { OpportunityScanner } from "@/app/_components/opportunity-scanner";
+import { ManualTradeTicket } from "@/app/_components/manual-trade-ticket";
 import { PortfolioView } from "@/app/_components/portfolio-view";
 import { StrategyLab } from "@/app/_components/strategy-lab";
 import type { DecisionSnapshot, PlatformSnapshot, ScannerSnapshot } from "@/lib/types";
 
-type View = "portfolio" | "scanner" | "backtests" | "strategy" | "ops";
+type View = "portfolio" | "scanner" | "backtests" | "strategy" | "manual" | "ops";
 
 const navItems = [
   { id: "portfolio" as const, label: "Portfolio", icon: WalletCards },
   { id: "scanner" as const, label: "Scanner", icon: ScanSearch },
   { id: "backtests" as const, label: "Backtests", icon: ChartSpline },
   { id: "strategy" as const, label: "Strategy Lab", icon: FlaskConical },
+  { id: "manual" as const, label: "Manual Trade", icon: ListPlus },
   { id: "ops" as const, label: "Agent Ops", icon: Bot },
 ];
 
@@ -90,6 +93,7 @@ export function Dashboard({
           {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} />}
           {view === "backtests" && <BacktestView />}
           {view === "strategy" && <StrategyLab snapshot={snapshot} onSnapshot={setSnapshot} />}
+          {view === "manual" && <ManualTradeTicket />}
           {view === "ops" && <AgentOps platform={initialPlatform} snapshot={snapshot} />}
         </div>
         <footer className="platform-footer"><span><LockKeyhole size={12} aria-hidden="true" /> Paper environment</span><span><Braces size={12} aria-hidden="true" /> Decision {snapshot.decision_id.slice(0, 12)}</span><span><ChartNoAxesCombined size={12} aria-hidden="true" /> Not investment advice</span><span><CircleDollarSign size={12} aria-hidden="true" /> P&amp;L from {initialPlatform.mode}</span></footer>

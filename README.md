@@ -10,8 +10,9 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 ## What works now
 
 - Two-axis market regime classification: direction × volatility.
-- Technical, Swing, Research, Rotation, Bull, Bear, and Risk agent outputs.
-- Explicit 5-agent proposal voting followed by a separate deterministic Risk gate.
+- Technical, Options Microstructure, Swing, Research, Rotation, Bull, Bear, and Risk outputs.
+- Explicit 6-agent proposal voting followed by a separate deterministic Risk gate.
+- Live Alpaca option-chain GEX, gamma concentration, and call/put wall evidence.
 - Defined-risk strategy selection with a first-class `NO_TRADE` decision.
 - XSP index-option debit spreads driven by SPY swing breakouts; DJX is excluded by validation.
 - A 24-name, 15-minute large-cap scanner for liquid equity-option candidates,
@@ -23,6 +24,7 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - Responsive decision cockpit with price/regime timeline and audit trail.
 - Portfolio command center with Alpaca paper P&L, positions, and recent orders.
 - Interactive Strategy Lab for mode, risk budget, confidence, and expiration controls.
+- Operator-token-protected manual paper ticket for one-lot, two-leg debit spreads.
 - Agent Ops view showing the decision pipeline and API/MCP/CLI connection state.
 - Backtesting workspace with dated train/holdout results from Alpaca historical bars.
 - Portable JSON decision receipts containing the full council vote, deterministic
@@ -67,7 +69,38 @@ ALPACA_SECRET_KEY=your_paper_secret
 ```
 
 The backend reads historical bars and recent news. Order execution is available
-only through the separate paper-only CLI runner described below.
+through the paper-only CLI runner and the separately locked manual MLeg endpoint.
+
+### Trade criteria
+
+A directional autonomous trade needs a completed 18 EMA crossover or validated
+swing breakout, daily 18/50 trend alignment, SPY alignment, at least $100M of
+average daily dollar volume, relative-strength/volume conviction, 3 of 6 council
+votes, live quote/liquidity checks, and deterministic Risk approval. The GEX lane
+adds three structure rules: missing or low-quality chain data fails closed;
+negative gamma caps maximum loss at $200; and gamma concentration at or above
+60% requires a confirmed breakout before chasing direction. `NO_TRADE` remains
+a normal result.
+
+The microstructure calculation follows the formulas explicitly published in
+Professor Ninh D. Nguyen's supplied materials: signed GEX is
+`± gamma × open interest × 100 × spot`, and Gamma Concentration is the share of
+`gamma × open interest` within ±2% of spot. Alpaca supplies chain Greeks and
+contract open interest for this lane. GEX+, GIV, CR(x), GRIP, and REPH are not
+fabricated: GEX+ requires vanna, while GRIP/REPH need the missing formula or
+graphic. Professor sources remain external research inputs; the large historical
+files are not committed.
+
+The supplied workbook's cached 2005–2026 series was checked independently with
+`scripts/backtest_professor_gex.py`. On its chronological 30% holdout, GEX had a
+−0.481 correlation with 5-session forward realized volatility, and negative-GEX
+days had 1.934× the average realized volatility of positive-GEX days. See
+`docs/professor-gex-validation.json`. This validates a volatility-risk overlay,
+not a directional entry signal or option P&L strategy.
+
+```bash
+python3 scripts/backtest_professor_gex.py /path/to/GEX_NN_Copy.xlsm
+```
 
 ### Alpaca MCP server
 
@@ -198,6 +231,25 @@ DIA→DJX cross-asset confirmation failed, so DJX is deliberately excluded. See
 `docs/backtest-results.json` for the complete result and limitations. This is a
 signal-direction test—not historical option-fill P&L—and is not predictive.
 
+### Manual paper ticket
+
+The dashboard Manual Trade workspace accepts exact OCC symbols for the long and
+short legs. Preview validates same underlying/expiry/type, 7–60 DTE, correct
+debit-spread strike order, live two-sided quotes, at most 20% bid/ask width,
+limit-price sanity, and a hard $200 maximum loss. Submission uses one atomic
+Alpaca `mleg` limit order and always constructs `TradingClient(..., paper=True)`.
+
+To unlock it locally or on Vercel, create a long random operator token and set:
+
+```dotenv
+ENABLE_MANUAL_PAPER_ORDERS=true
+MANUAL_TRADE_TOKEN=replace_with_a_long_private_token
+```
+
+Keep that token private. A user must enter it in the ticket and type `PAPER` for
+each submission. Manual execution cannot override structural, quote, or risk
+gates.
+
 ### Vercel credentials
 
 Do not upload or commit `.env`. After claiming/linking the Vercel project, add
@@ -210,6 +262,8 @@ MARKET_DATA_MODE=alpaca
 ENABLE_PAPER_ORDERS=false
 ALPACA_MCP_ENABLED=false
 ALPACA_CLI_ENABLED=false
+ENABLE_MANUAL_PAPER_ORDERS=false
+MANUAL_TRADE_TOKEN=use_a_long_random_secret
 ```
 
 Apply them to Production and Preview, then redeploy. The MCP process runs on

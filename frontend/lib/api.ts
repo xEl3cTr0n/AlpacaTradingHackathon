@@ -1,6 +1,9 @@
 import type {
   AnalysisControls,
   DecisionSnapshot,
+  ManualTradePreview,
+  ManualTradeRequest,
+  ManualTradeResult,
   PlatformSnapshot,
   ScannerSnapshot,
 } from "@/lib/types";
@@ -27,7 +30,7 @@ function requireLiveSource(label: string, source: string): void {
 export async function fetchSnapshot(symbol = "SPY"): Promise<DecisionSnapshot> {
   const response = await fetch(`${apiUrl}/api/v1/snapshot?symbol=${encodeURIComponent(symbol)}`, {
     cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(25_000),
   });
   const snapshot = await responseJson<DecisionSnapshot>(response, "Regime API");
   requireLiveSource("Regime API", snapshot.market.source);
@@ -43,7 +46,7 @@ export async function analyzeSnapshot(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ symbol, ...controls }),
     cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(25_000),
   });
   const snapshot = await responseJson<DecisionSnapshot>(response, "Analysis API");
   requireLiveSource("Analysis API", snapshot.market.source);
@@ -68,4 +71,34 @@ export async function fetchScanner(limit = 12): Promise<ScannerSnapshot> {
   const scanner = await responseJson<ScannerSnapshot>(response, "Scanner API");
   requireLiveSource("Scanner API", scanner.source);
   return scanner;
+}
+
+export async function previewManualTrade(
+  request: ManualTradeRequest,
+): Promise<ManualTradePreview> {
+  const response = await fetch(`${apiUrl}/api/v1/manual-trades/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
+  });
+  return responseJson<ManualTradePreview>(response, "Manual trade preview");
+}
+
+export async function executeManualTrade(
+  request: ManualTradeRequest,
+  operatorToken: string,
+): Promise<ManualTradeResult> {
+  const response = await fetch(`${apiUrl}/api/v1/manual-trades/execute`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Operator-Token": operatorToken,
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
+  });
+  return responseJson<ManualTradeResult>(response, "Manual paper order");
 }

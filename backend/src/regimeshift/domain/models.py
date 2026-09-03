@@ -78,6 +78,13 @@ class ScannerPattern(StrEnum):
     NO_SETUP = "no_setup"
 
 
+class GammaRegime(StrEnum):
+    STABILIZING = "stabilizing"
+    AMPLIFYING = "amplifying"
+    MIXED = "mixed"
+    UNAVAILABLE = "unavailable"
+
+
 class PricePoint(BaseModel):
     timestamp: datetime
     close: float
@@ -171,6 +178,25 @@ class SectorRotationAssessment(BaseModel):
     rationale: str
 
 
+class OptionsMicrostructureAssessment(BaseModel):
+    underlying_symbol: str
+    as_of: datetime
+    source: str
+    status: str
+    contract_count: int = Field(ge=0)
+    net_gex: float
+    gross_gex: float = Field(ge=0)
+    gamma_concentration: float | None = Field(default=None, ge=0, le=1)
+    nope_options: float | None = Field(default=None, ge=-1, le=1)
+    put_vega_intensity: float | None = Field(default=None, ge=0, le=1)
+    call_wall: float | None = Field(default=None, gt=0)
+    put_wall: float | None = Field(default=None, gt=0)
+    gamma_regime: GammaRegime
+    data_quality: float = Field(ge=0, le=1)
+    rationale: str
+    evidence: list[str]
+
+
 class SwingAssessment(BaseModel):
     signal: SwingSignal
     confidence: float = Field(ge=0, le=1)
@@ -254,6 +280,7 @@ class DecisionSnapshot(BaseModel):
     regime: RegimeAssessment
     swing: SwingAssessment
     sector_rotation: SectorRotationAssessment
+    options_microstructure: OptionsMicrostructureAssessment
     agents: list[AgentVerdict]
     council: CouncilDecision
     tool_evidence: list[ToolEvidence]
@@ -274,6 +301,39 @@ class AnalysisControls(BaseModel):
 
 class AnalyzeRequest(AnalysisControls):
     symbol: str = Field(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$")
+
+
+class ManualTradeRequest(BaseModel):
+    long_symbol: str = Field(min_length=16, max_length=24, pattern=r"^[A-Za-z.0-9]+$")
+    short_symbol: str = Field(min_length=16, max_length=24, pattern=r"^[A-Za-z.0-9]+$")
+    limit_debit: float = Field(gt=0, le=20)
+    quantity: int = Field(default=1, ge=1, le=1)
+    rationale: str = Field(default="Operator-entered paper trade", max_length=240)
+
+
+class ManualTradePreview(BaseModel):
+    valid: bool
+    paper_only: bool = True
+    underlying_symbol: str
+    option_type: str
+    expiration: datetime
+    long_strike: float
+    short_strike: float
+    width: float
+    limit_debit: float
+    market_debit: float | None = None
+    maximum_loss: float
+    maximum_reward: float
+    risk_budget: float
+    liquidity_passed: bool
+    reasons: list[str]
+
+
+class ManualTradeResult(BaseModel):
+    status: str
+    paper_only: bool = True
+    order_id: str
+    client_order_id: str
 
 
 class EquityPoint(BaseModel):

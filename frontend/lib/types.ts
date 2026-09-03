@@ -98,6 +98,24 @@ export interface DecisionSnapshot {
     }>;
     rationale: string;
   };
+  options_microstructure: {
+    underlying_symbol: string;
+    as_of: string;
+    source: string;
+    status: string;
+    contract_count: number;
+    net_gex: number;
+    gross_gex: number;
+    gamma_concentration?: number | null;
+    nope_options?: number | null;
+    put_vega_intensity?: number | null;
+    call_wall?: number | null;
+    put_wall?: number | null;
+    gamma_regime: "stabilizing" | "amplifying" | "mixed" | "unavailable";
+    data_quality: number;
+    rationale: string;
+    evidence: string[];
+  };
   agents: AgentVerdict[];
   council: {
     votes: Array<{
@@ -144,6 +162,39 @@ export interface DecisionSnapshot {
   };
   controls: AnalysisControls;
   disclaimer: string;
+}
+
+export interface ManualTradeRequest {
+  long_symbol: string;
+  short_symbol: string;
+  limit_debit: number;
+  quantity: 1;
+  rationale: string;
+}
+
+export interface ManualTradePreview {
+  valid: boolean;
+  paper_only: true;
+  underlying_symbol: string;
+  option_type: string;
+  expiration: string;
+  long_strike: number;
+  short_strike: number;
+  width: number;
+  limit_debit: number;
+  market_debit?: number | null;
+  maximum_loss: number;
+  maximum_reward: number;
+  risk_budget: number;
+  liquidity_passed: boolean;
+  reasons: string[];
+}
+
+export interface ManualTradeResult {
+  status: string;
+  paper_only: true;
+  order_id: string;
+  client_order_id: string;
 }
 
 export interface EquityPoint {
