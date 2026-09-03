@@ -1,4 +1,3 @@
-import { getDemoPlatform, getDemoScanner, getDemoSnapshot } from "@/lib/demo";
 import type {
   AnalysisControls,
   DecisionSnapshot,
@@ -11,20 +10,28 @@ import type {
 const apiUrl =
   process.env.BACKEND_URL ?? process.env.REGIMESHIFT_API_URL ?? "http://127.0.0.1:8000";
 
-export async function fetchSnapshot(symbol = "SPY"): Promise<DecisionSnapshot> {
-  try {
-    const response = await fetch(`${apiUrl}/api/v1/snapshot?symbol=${encodeURIComponent(symbol)}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) throw new Error(`Regime API returned ${response.status}`);
-    return (await response.json()) as DecisionSnapshot;
-  } catch (error) {
-    console.warn("Regime API unreachable, serving offline demo snapshot:", error);
-    const demo = getDemoSnapshot();
-    demo.market.symbol = symbol;
-    return demo;
+const syntheticSource = /demo|synthetic|fallback/i;
+
+async function responseJson<T>(response: Response, label: string): Promise<T> {
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`${label} returned ${response.status}: ${detail.slice(0, 180)}`);
   }
+  return (await response.json()) as T;
+}
+
+function requireLiveSource(label: string, source: string): void {
+  if (syntheticSource.test(source)) throw new Error(`${label} returned non-live data.`);
+}
+
+export async function fetchSnapshot(symbol = "SPY"): Promise<DecisionSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/snapshot?symbol=${encodeURIComponent(symbol)}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const snapshot = await responseJson<DecisionSnapshot>(response, "Regime API");
+  requireLiveSource("Regime API", snapshot.market.source);
+  return snapshot;
 }
 
 export async function analyzeSnapshot(
@@ -38,37 +45,27 @@ export async function analyzeSnapshot(
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Analysis API returned ${response.status}: ${body.slice(0, 180)}`);
-  }
-  return (await response.json()) as DecisionSnapshot;
+  const snapshot = await responseJson<DecisionSnapshot>(response, "Analysis API");
+  requireLiveSource("Analysis API", snapshot.market.source);
+  return snapshot;
 }
 
 export async function fetchPlatform(): Promise<PlatformSnapshot> {
-  try {
-    const response = await fetch(`${apiUrl}/api/v1/platform`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) throw new Error(`Platform API returned ${response.status}`);
-    return (await response.json()) as PlatformSnapshot;
-  } catch (error) {
-    console.warn("Platform API unreachable, serving offline demo telemetry:", error);
-    return getDemoPlatform();
-  }
+  const response = await fetch(`${apiUrl}/api/v1/platform`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const platform = await responseJson<PlatformSnapshot>(response, "Platform API");
+  requireLiveSource("Platform API", platform.mode);
+  return platform;
 }
 
 export async function fetchScanner(limit = 12): Promise<ScannerSnapshot> {
-  try {
-    const response = await fetch(`${apiUrl}/api/v1/scanner?limit=${limit}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`Scanner API returned ${response.status}`);
-    return (await response.json()) as ScannerSnapshot;
-  } catch (error) {
-    console.warn("Scanner API unreachable, serving offline scanner preview:", error);
-    return getDemoScanner();
-  }
+  const response = await fetch(`${apiUrl}/api/v1/scanner?limit=${limit}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  const scanner = await responseJson<ScannerSnapshot>(response, "Scanner API");
+  requireLiveSource("Scanner API", scanner.source);
+  return scanner;
 }

@@ -16,12 +16,14 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - XSP index-option debit spreads driven by SPY swing breakouts; DJX is excluded by validation.
 - A 24-name large-cap scanner for liquid equity-option candidates, ranked by
   confirmed 18 EMA crosses, trend, SPY alignment, relative strength, and volume.
-- Demo data mode that runs without credentials or an open market.
+- Live Alpaca-only dashboard data with an explicit unavailable state; synthetic
+  fallback values are never shown to production users.
 - Alpaca stock-bar and news adapters for paper-account credentials.
 - Responsive decision cockpit with price/regime timeline and audit trail.
 - Portfolio command center with Alpaca paper P&L, positions, and recent orders.
 - Interactive Strategy Lab for mode, risk budget, confidence, and expiration controls.
 - Agent Ops view showing the decision pipeline and API/MCP/CLI connection state.
+- Backtesting workspace with dated train/holdout results from Alpaca historical bars.
 - Portable JSON decision receipts containing the full council vote, deterministic
   risk-gate result, policy inputs, market provenance, and Alpaca tool evidence.
 

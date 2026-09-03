@@ -5,6 +5,7 @@ import {
   Bot,
   Braces,
   ChartNoAxesCombined,
+  ChartSpline,
   ChevronRight,
   CircleDollarSign,
   FlaskConical,
@@ -17,16 +18,18 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AgentOps } from "@/app/_components/agent-ops";
+import { BacktestView } from "@/app/_components/backtest-view";
 import { OpportunityScanner } from "@/app/_components/opportunity-scanner";
 import { PortfolioView } from "@/app/_components/portfolio-view";
 import { StrategyLab } from "@/app/_components/strategy-lab";
 import type { DecisionSnapshot, PlatformSnapshot, ScannerSnapshot } from "@/lib/types";
 
-type View = "portfolio" | "scanner" | "strategy" | "ops";
+type View = "portfolio" | "scanner" | "backtests" | "strategy" | "ops";
 
 const navItems = [
   { id: "portfolio" as const, label: "Portfolio", icon: WalletCards },
   { id: "scanner" as const, label: "Scanner", icon: ScanSearch },
+  { id: "backtests" as const, label: "Backtests", icon: ChartSpline },
   { id: "strategy" as const, label: "Strategy Lab", icon: FlaskConical },
   { id: "ops" as const, label: "Agent Ops", icon: Bot },
 ];
@@ -62,7 +65,7 @@ export function Dashboard({
         </nav>
         <div className="watchlist">
           <div className="sidebar-section-title"><span>Watchlist</span><Radio size={14} aria-hidden="true" /></div>
-          {[["SPY", "+0.64%"], ["QQQ", "+0.41%"], ["IWM", "-0.22%"]].map(([symbol, change]) => (
+          {[[snapshot.market.symbol, `${snapshot.market.price_change_pct >= 0 ? "+" : ""}${snapshot.market.price_change_pct.toFixed(2)}%`]].map(([symbol, change]) => (
             <button key={symbol} type="button" onClick={() => setView("strategy")}><span>{symbol}</span><strong className={change.startsWith("+") ? "positive" : "negative"}>{change}</strong></button>
           ))}
         </div>
@@ -85,6 +88,7 @@ export function Dashboard({
         <div className="platform-content" id="platform-content">
           {view === "portfolio" && <PortfolioView platform={initialPlatform} onOpenStrategy={() => setView("strategy")} />}
           {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} />}
+          {view === "backtests" && <BacktestView />}
           {view === "strategy" && <StrategyLab snapshot={snapshot} onSnapshot={setSnapshot} />}
           {view === "ops" && <AgentOps platform={initialPlatform} snapshot={snapshot} />}
         </div>

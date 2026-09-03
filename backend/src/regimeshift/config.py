@@ -10,7 +10,7 @@ ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
 class Settings(BaseSettings):
     app_name: str = "RegimeShift AI"
     environment: str = "development"
-    market_data_mode: str = "demo"
+    market_data_mode: str = "alpaca"
     alpaca_api_key: str = ""
     alpaca_secret_key: SecretStr = SecretStr("")
     alpaca_paper: bool = True
