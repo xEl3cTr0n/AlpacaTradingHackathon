@@ -20,6 +20,7 @@ export interface AnalysisControls {
   max_risk_pct: number;
   min_confidence: number;
   target_dte: number;
+  max_loss_cap_dollars?: number | null;
 }
 
 export interface PricePoint {
@@ -161,6 +162,8 @@ export interface ScannerCandidate {
   option_bias: string;
   conviction: number;
   actionable: boolean;
+  signal_tier: "production" | "exploration" | "watch";
+  risk_cap_dollars: number;
   current_price: number;
   ema_18: number;
   ema_50: number;
@@ -179,6 +182,7 @@ export interface ScannerSnapshot {
   generated_at: string;
   source: string;
   interval_minutes: number;
+  timeframe: string;
   universe_size: number;
   scanned_count: number;
   actionable_count: number;

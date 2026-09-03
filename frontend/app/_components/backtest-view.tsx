@@ -14,7 +14,7 @@ export function BacktestView() {
       {backtestReports.map((report) => (
         <section className="panel backtest-report" key={report.id}>
           <div className="panel-heading"><div><p className="eyebrow">{report.instrument}</p><h2>{report.name}</h2></div><span className={`decision-chip ${report.gatePassed ? "approved" : "vetoed"}`}><CheckCircle2 size={14} aria-hidden="true" /> {report.gatePassed ? "Gate passed" : "Gate failed"}</span></div>
-          <div className="backtest-meta"><span><CalendarRange size={13} />{report.period}</span><span>{report.bars.toLocaleString()} daily bars</span><span>Generated {new Date(report.generatedAt).toLocaleDateString()}</span></div>
+          <div className="backtest-meta"><span><CalendarRange size={13} />{report.period}</span><span>{report.bars.toLocaleString()} {report.barSize} bars</span><span>Generated {new Date(report.generatedAt).toLocaleDateString()}</span></div>
           <div className="backtest-score-grid">
             <article><span>Holdout trades</span><strong>{report.holdout.trades}</strong><small>Train: {report.train.trades}</small></article>
             <article><span>Win rate</span><strong>{pct(report.holdout.winRate)}</strong><small>Train: {pct(report.train.winRate)}</small></article>

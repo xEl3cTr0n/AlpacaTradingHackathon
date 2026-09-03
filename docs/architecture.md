@@ -4,16 +4,17 @@
 
 ```text
 MarketDataProvider
-  -> LargeCapScanner (24 names, 18 EMA cross + confirmation)
+  -> LargeCapScanner (24 names, completed 15-minute 18 EMA cross + daily context)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
   -> Technical + Swing + Research + Rotation evidence
   -> Bull + Bear adversarial theses
   -> VotingCouncil (5 deterministic proposal-relative votes)
   -> StrategyPolicy
-  -> RiskGate (approve / resize / veto)
+  -> RiskGate (approve / $200 exploration resize / veto)
   -> DecisionSnapshot audit record
   -> Alpaca CLI contract discovery + quote validation
   -> dry-run or gated paper-only multi-leg order
+  -> ManagedExitPolicy (profit / loss / DTE / regime reversal)
 ```
 
 The system intentionally separates calculation, persuasion, and authorization.
@@ -48,6 +49,17 @@ the runner's explicit `--execute` flag and all of these conditions:
    a 50-contract open-interest floor pass.
 6. Quoted maximum loss is inside the account risk budget.
 7. `ALPACA_LIVE_TRADE=false` is injected by code and cannot be overridden.
+
+The scheduled worker evaluates every qualified scanner candidate through the
+council rather than stopping at the first veto. The backtested daily production
+tier can execute when explicitly enabled. The newer intraday production and
+exploration tiers remain preview-only because their dated holdout gates failed.
+`ENABLE_EXPLORATION_ORDERS` is an independent lock and cannot override that
+evidence gate.
+
+Exit automation only manages complete two-leg spreads whose entry order has a
+RegimeShift client ID. It submits the inverse legs together, so it never
+intentionally leaves a naked short option.
 
 The public Vercel app is the observability and analysis surface. The stdio MCP
 server and native CLI execute in the local/worker environment, not in a Vercel

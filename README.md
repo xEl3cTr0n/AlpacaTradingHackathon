@@ -14,8 +14,9 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - Explicit 5-agent proposal voting followed by a separate deterministic Risk gate.
 - Defined-risk strategy selection with a first-class `NO_TRADE` decision.
 - XSP index-option debit spreads driven by SPY swing breakouts; DJX is excluded by validation.
-- A 24-name large-cap scanner for liquid equity-option candidates, ranked by
-  confirmed 18 EMA crosses, trend, SPY alignment, relative strength, and volume.
+- A 24-name, 15-minute large-cap scanner for liquid equity-option candidates,
+  ranked by 18 EMA crosses, prior-session daily trend, SPY alignment, relative
+  strength, and volume.
 - Live Alpaca-only dashboard data with an explicit unavailable state; synthetic
   fallback values are never shown to production users.
 - Alpaca stock-bar and news adapters for paper-account credentials.
@@ -108,11 +109,13 @@ scanner-universe debit spreads and cannot route to a live account.
 ### Large-cap options scanner
 
 The dashboard Scanner workspace performs a read-only pass over 24 large-cap
-stocks. A candidate is actionable only when price crosses the 18 EMA, the
-18/50 EMA trend and SPY direction agree, 20-session dollar volume exceeds
-$100M, and composite conviction is at least 60%. Dollar volume is only the
-first liquidity screen: the CLI checks live bid/ask width and at least 50 open
-contracts on both equity-option legs before a paper order can pass.
+stocks using completed 15-minute bars. A candidate is actionable only when
+price crosses the intraday 18 EMA, the prior-session daily 18/50 trend and SPY
+direction agree, 20-session dollar volume exceeds $100M, and composite
+conviction is at least 55%. Signals at 60%+ are production candidates; the
+55–60% exploration tier has a deterministic $200 maximum-loss cap and a
+separate execution lock. The CLI then checks bid/ask width and at least 50 open
+contracts on both equity-option legs.
 
 Run one scan and optional CLI dry-run:
 
@@ -126,6 +129,10 @@ Run continuously every 15 minutes:
 backend/.venv/bin/python scripts/scanner_runner.py --loop --interval-minutes 15
 ```
 
+Use `--timeframe daily` to run the older production policy backed by the
+five-year daily holdout. The default intraday policy is analysis-only until its
+own evidence gate passes.
+
 ### Scheduled paper execution
 
 Vercel serves the dashboard and reads Alpaca telemetry, but it does not keep the
@@ -134,10 +141,17 @@ runs the scanner every 15 minutes during the broad US market-hours window.
 
 Add `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as GitHub Actions repository secrets.
 The workflow remains preview-only until the repository variable
-`ENABLE_PAPER_ORDERS` is explicitly set to `true`. With that variable enabled,
-orders still require an actionable crossover, council approval, the deterministic
-Risk gate, live option liquidity, an open market, and duplicate-signal protection.
-All orders are forced to the Alpaca paper environment.
+`ENABLE_PAPER_ORDERS` is explicitly set to `true` **and** the committed intraday
+holdout gate passes. `ENABLE_EXPLORATION_ORDERS=true` is a separate lock and is
+also ignored until its own holdout gate passes. Orders still require an
+actionable crossover, council approval, the deterministic Risk gate, live
+option liquidity, an open market, and duplicate-signal protection. All orders
+are forced to the Alpaca paper environment.
+
+Each cycle evaluates all qualified scanner candidates through the voting
+council instead of stopping after the first rejection. It also inspects spreads
+opened by RegimeShift and prepares an atomic two-leg exit at 50% of maximum
+reward, 75% of maximum loss, seven DTE, or an opposing detected trend.
 
 Add `--execute` only when you intentionally want eligible signals submitted to
 Alpaca paper trading. The runner skips closed markets and persists a local,
@@ -153,6 +167,19 @@ The 30% chronological holdout produced 33 non-overlapping directional signals,
 a 66.7% win rate, +11.7% compounded underlying proxy return, and -27.0% maximum
 drawdown after 20 bps friction. See `docs/scanner-backtest-results.json`. This
 does not model historical option fills and is not predictive.
+
+Reproduce the intraday validation with:
+
+```bash
+backend/.venv/bin/python scripts/backtest_intraday_scanner.py --days 120
+```
+
+The current 120-day holdout did **not** pass after modeled friction, so both
+intraday execution tiers remain locked while the scanner and council run in
+preview mode. See `docs/intraday-scanner-backtest-results.json`. This fail-closed
+result is intentional; changing thresholds requires a new chronological test.
+The previously validated daily production policy can still submit paper trades
+when `ENABLE_PAPER_ORDERS=true`.
 
 ### Backtest gate
 

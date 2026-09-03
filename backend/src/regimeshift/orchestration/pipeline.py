@@ -228,6 +228,8 @@ class DecisionPipeline:
         controls: AnalysisControls,
     ) -> StrategyProposal:
         account_risk = self.settings.account_equity * controls.max_risk_pct
+        if controls.max_loss_cap_dollars is not None:
+            account_risk = min(account_risk, controls.max_loss_cap_dollars)
         effective_direction = regime.direction
         if controls.strategy_mode == StrategyMode.BULLISH:
             effective_direction = Direction.BULLISH
@@ -314,6 +316,8 @@ class DecisionPipeline:
         controls: AnalysisControls,
     ) -> RiskDecision:
         max_allowed = self.settings.account_equity * controls.max_risk_pct
+        if controls.max_loss_cap_dollars is not None:
+            max_allowed = min(max_allowed, controls.max_loss_cap_dollars)
         reasons: list[str] = []
         approved = True
         if strategy.name == StrategyName.NO_TRADE:

@@ -216,6 +216,8 @@ class ScannerCandidate(BaseModel):
     option_bias: str
     conviction: float = Field(ge=0, le=1)
     actionable: bool
+    signal_tier: str = "watch"
+    risk_cap_dollars: float = Field(default=0, ge=0)
     current_price: float = Field(gt=0)
     ema_18: float = Field(gt=0)
     ema_50: float = Field(gt=0)
@@ -234,6 +236,7 @@ class ScannerSnapshot(BaseModel):
     generated_at: datetime
     source: str
     interval_minutes: int = Field(ge=5, le=240)
+    timeframe: str = "1Day"
     universe_size: int = Field(ge=1)
     scanned_count: int = Field(ge=0)
     actionable_count: int = Field(ge=0)
@@ -266,6 +269,7 @@ class AnalysisControls(BaseModel):
     max_risk_pct: float = Field(default=0.01, ge=0.001, le=0.02)
     min_confidence: float = Field(default=0.55, ge=0.5, le=0.95)
     target_dte: int = Field(default=30, ge=7, le=60)
+    max_loss_cap_dollars: float | None = Field(default=None, ge=50, le=2_000)
 
 
 class AnalyzeRequest(AnalysisControls):

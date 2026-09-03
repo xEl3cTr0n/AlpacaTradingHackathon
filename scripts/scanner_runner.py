@@ -27,92 +27,141 @@ def run_cycle(
     limit: int,
     target_dte: int,
     submitted_signals: set[str],
+    timeframe: str,
 ) -> dict[str, object]:
     market_data = AlpacaMarketDataProvider(settings)
-    histories = market_data.get_price_history(["SPY", *LARGE_CAP_UNIVERSE], days=365)
-    scan = LargeCapScanner().scan(
-        histories,
-        limit=limit,
-        source="Alpaca IEX fully adjusted daily bars",
-    )
+    symbols = ["SPY", *LARGE_CAP_UNIVERSE]
+    if timeframe == "intraday":
+        histories = market_data.get_intraday_history(symbols, days=10, bar_minutes=15)
+        liquidity_histories = market_data.get_price_history(symbols, days=120)
+        scan = LargeCapScanner().scan(
+            histories,
+            limit=limit,
+            source="Alpaca IEX fully adjusted 15-minute bars",
+            timeframe="15Min",
+            liquidity_histories=liquidity_histories,
+            annualization_periods=252 * 26,
+        )
+    else:
+        histories = market_data.get_price_history(symbols, days=365)
+        scan = LargeCapScanner().scan(
+            histories,
+            limit=limit,
+            source="Alpaca IEX fully adjusted daily bars",
+            timeframe="1Day",
+        )
     summary: dict[str, object] = {
         "generated_at": datetime.now(UTC).isoformat(),
         "paper_only": True,
         "scan": scan.model_dump(mode="json"),
         "execution": {"status": "no_trade", "reason": "No actionable setup"},
     }
-    candidate = next((item for item in scan.candidates if item.actionable), None)
-    if candidate is None:
-        return summary
-    signal_key = f"{candidate.symbol}:{candidate.as_of.date()}:{candidate.pattern.value}"
-    if execute and signal_key in submitted_signals:
-        summary["execution"] = {
-            "status": "duplicate_blocked",
-            "reason": "This symbol, bar, and pattern were already submitted",
-        }
-        return summary
-
-    snapshot = DecisionPipeline(settings, market_data).analyze(
-        candidate.symbol,
-        AnalysisControls(
-            instrument_mode=InstrumentMode.EQUITY_OPTION,
-            min_confidence=max(0.55, candidate.conviction),
-            target_dte=target_dte,
-        ),
-    )
-    summary["decision"] = {
-        "decision_id": snapshot.decision_id,
-        "symbol": candidate.symbol,
-        "scanner_conviction": candidate.conviction,
-        "council_approved": snapshot.council.approved,
-        "risk_approved": snapshot.risk.approved,
-        "strategy": snapshot.strategy.display_name,
-    }
-    if not snapshot.council.approved or not snapshot.risk.approved:
-        summary["execution"] = {
-            "status": "no_trade",
-            "reason": "Council or deterministic Risk Agent rejected the setup",
-        }
-        return summary
-
     cli = AlpacaCliAdapter(settings)
-    client_order_id = cli.signal_client_order_id(signal_key)
-    existing_order = cli.existing_order(client_order_id)
-    if existing_order is not None:
-        summary["execution"] = {
-            "status": "duplicate_blocked",
-            "reason": "Alpaca already has an order for this daily signal",
-            "order": existing_order,
-        }
+    verification: dict[str, object] | None = None
+    directions = {candidate.symbol: candidate.direction for candidate in scan.candidates}
+    exit_plans = cli.managed_exit_plans(directions)
+    exit_results: list[dict[str, object]] = []
+    if exit_plans:
+        verification = cli.verify()
+        market_open = bool(verification["clock"].get("is_open"))
+        for plan in exit_plans:
+            result = cli.submit_exit(plan, execute=execute and market_open)
+            exit_results.append(
+                {
+                    "underlying_symbol": plan["underlying_symbol"],
+                    "reasons": plan["reasons"],
+                    "unrealized_pnl": plan["unrealized_pnl"],
+                    "status": result["status"] if market_open or not execute else "market_closed",
+                    "paper_only": True,
+                }
+            )
+    summary["managed_exits"] = exit_results
+    candidates = [item for item in scan.candidates if item.actionable]
+    if not candidates:
         return summary
-    verification = cli.verify()
-    if execute and not bool(verification["clock"].get("is_open")):
-        summary["cli"] = verification
-        summary["execution"] = {
-            "status": "market_closed",
-            "reason": "Paper submission waits for an open market",
-        }
-        return summary
-
-    plan = cli.prepare_spread(snapshot)
-    result = cli.submit_or_preview(
-        snapshot,
-        plan,
-        execute=execute,
-        client_order_id=client_order_id,
-    )
-    if result["status"] == "submitted":
-        submitted_signals.add(signal_key)
-        STATE_PATH.write_text(
-            json.dumps({"submitted_signals": sorted(submitted_signals)}, indent=2) + "\n",
-            encoding="utf-8",
+    summary["evaluations"] = []
+    pipeline = DecisionPipeline(settings, market_data)
+    for candidate in candidates:
+        signal_key = (
+            f"{candidate.symbol}:{candidate.as_of.isoformat()}:{candidate.pattern.value}"
         )
-    summary["cli"] = verification
-    summary["plan"] = {key: value for key, value in plan.items() if key != "legs"}
+        exploration = candidate.signal_tier == "exploration"
+        snapshot = pipeline.analyze(
+            candidate.symbol,
+            AnalysisControls(
+                instrument_mode=InstrumentMode.EQUITY_OPTION,
+                min_confidence=max(0.55, candidate.conviction),
+                target_dte=target_dte,
+                max_loss_cap_dollars=(candidate.risk_cap_dollars if exploration else None),
+            ),
+        )
+        evaluation = {
+            "decision_id": snapshot.decision_id,
+            "symbol": candidate.symbol,
+            "signal_tier": candidate.signal_tier,
+            "scanner_conviction": candidate.conviction,
+            "council_approved": snapshot.council.approved,
+            "council_support": snapshot.council.support_count,
+            "risk_approved": snapshot.risk.approved,
+            "risk_cap_dollars": snapshot.risk.max_allowed_loss,
+            "strategy": snapshot.strategy.display_name,
+        }
+        summary["evaluations"].append(evaluation)
+        if not snapshot.council.approved or not snapshot.risk.approved:
+            continue
+
+        client_order_id = cli.signal_client_order_id(signal_key)
+        if execute and (
+            signal_key in submitted_signals
+            or cli.existing_order(client_order_id) is not None
+        ):
+            evaluation["result"] = "duplicate_blocked"
+            continue
+        verification = verification or cli.verify()
+        candidate_execute = execute and (
+            not exploration
+            or (settings.enable_exploration_orders and timeframe == "intraday")
+        )
+        if candidate_execute and not bool(verification["clock"].get("is_open")):
+            summary["cli"] = verification
+            summary["execution"] = {
+                "status": "market_closed",
+                "reason": "Paper submission waits for an open market",
+            }
+            return summary
+        try:
+            plan = cli.prepare_spread(snapshot)
+            result = cli.submit_or_preview(
+                snapshot,
+                plan,
+                execute=candidate_execute,
+                client_order_id=client_order_id,
+            )
+        except ValueError as error:
+            evaluation["result"] = "contract_gate_rejected"
+            evaluation["reason"] = str(error)[:300]
+            continue
+        if result["status"] == "submitted":
+            submitted_signals.add(signal_key)
+            STATE_PATH.write_text(
+                json.dumps({"submitted_signals": sorted(submitted_signals)}, indent=2)
+                + "\n",
+                encoding="utf-8",
+            )
+        summary["decision"] = evaluation
+        summary["cli"] = verification
+        summary["plan"] = {key: value for key, value in plan.items() if key != "legs"}
+        summary["execution"] = {
+            "status": result["status"],
+            "allowed": result["allowed"],
+            "paper_only": result["paper_only"],
+            "signal_tier": candidate.signal_tier,
+            "exploration_execution_enabled": settings.enable_exploration_orders,
+        }
+        return summary
     summary["execution"] = {
-        "status": result["status"],
-        "allowed": result["allowed"],
-        "paper_only": result["paper_only"],
+        "status": "no_trade",
+        "reason": "Every scanner candidate was rejected by council, risk, or contract gates",
     }
     return summary
 
@@ -124,6 +173,7 @@ def main() -> int:
     parser.add_argument("--interval-minutes", type=int, default=15)
     parser.add_argument("--limit", type=int, default=12)
     parser.add_argument("--target-dte", type=int, default=30)
+    parser.add_argument("--timeframe", choices=("intraday", "daily"), default="intraday")
     args = parser.parse_args()
     if not 5 <= args.interval_minutes <= 240:
         parser.error("--interval-minutes must be between 5 and 240")
@@ -148,6 +198,7 @@ def main() -> int:
                 limit=args.limit,
                 target_dte=args.target_dte,
                 submitted_signals=submitted_signals,
+                timeframe=args.timeframe,
             )
             print(json.dumps(report, indent=2, default=str), flush=True)
         except Exception as error:  # keep an explicitly requested loop observable

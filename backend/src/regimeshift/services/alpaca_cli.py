@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from regimeshift.config import Settings
-from regimeshift.domain.models import DecisionSnapshot, StrategyName
+from regimeshift.domain.exits import managed_exit_plan
+from regimeshift.domain.models import DecisionSnapshot, Direction, StrategyName
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -293,6 +294,72 @@ class AlpacaCliAdapter:
             "client_order_id": order.client_order_id,
         }
 
+    def managed_exit_plans(
+        self, direction_by_symbol: dict[str, Direction] | None = None
+    ) -> list[dict[str, Any]]:
+        entries = self._run_list(
+            ["order", "list", "--status", "closed", "--nested", "--limit", "500", "--quiet"]
+        )
+        open_orders = self._run_list(
+            ["order", "list", "--status", "open", "--nested", "--limit", "500", "--quiet"]
+        )
+        positions = {
+            item["symbol"]: item
+            for item in self._run_list(["position", "list", "--quiet"])
+            if item.get("asset_class") in {"us_option", "us_index"}
+        }
+        open_client_ids = {str(item.get("client_order_id", "")) for item in open_orders}
+        plans: list[dict[str, Any]] = []
+        for entry in entries:
+            exit_client_id = f"regimeshift-exit-{str(entry.get('id', ''))[:32]}"
+            if exit_client_id in open_client_ids:
+                continue
+            underlying = ""
+            legs = entry.get("legs") or []
+            if legs:
+                symbol = str(legs[0].get("symbol", ""))
+                underlying = symbol[:-15].rstrip()
+            plan = managed_exit_plan(
+                entry,
+                positions,
+                current_direction=(direction_by_symbol or {}).get(underlying),
+            )
+            if plan is not None:
+                plan["client_order_id"] = exit_client_id
+                plans.append(plan)
+        return plans
+
+    def submit_exit(self, plan: dict[str, Any], *, execute: bool) -> dict[str, Any]:
+        if not plan.get("paper_only") or len(plan.get("legs", [])) != 2:
+            raise ValueError("Managed exits require a complete paper-only two-leg spread")
+        if execute and not self.settings.enable_paper_orders:
+            raise ValueError("ENABLE_PAPER_ORDERS must be true for CLI submission")
+        arguments = [
+            "order",
+            "submit",
+            "--order-class",
+            "mleg",
+            "--qty",
+            str(plan["quantity"]),
+            "--type",
+            "market",
+            "--time-in-force",
+            "day",
+            "--client-order-id",
+            plan["client_order_id"],
+            "--legs",
+            json.dumps(plan["legs"], separators=(",", ":")),
+            "--quiet",
+        ]
+        if not execute:
+            arguments.insert(2, "--dry-run")
+        order = self._run(arguments)
+        return {
+            "status": "submitted" if execute else "dry_run",
+            "paper_only": True,
+            "order": order,
+        }
+
     @staticmethod
     def _quote(snapshots: dict[str, Any], symbol: str) -> dict[str, float]:
         quote = snapshots.get(symbol, {}).get("latestQuote", {})
@@ -324,6 +391,18 @@ class AlpacaCliAdapter:
             return None
 
     def _run(self, arguments: list[str]) -> dict[str, Any]:
+        payload = self._run_payload(arguments)
+        if not isinstance(payload, dict):
+            raise ValueError("Alpaca CLI returned an unexpected response shape")
+        return payload
+
+    def _run_list(self, arguments: list[str]) -> list[dict[str, Any]]:
+        payload = self._run_payload(arguments)
+        if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+            raise ValueError("Alpaca CLI returned an unexpected list response")
+        return payload
+
+    def _run_payload(self, arguments: list[str]) -> Any:
         environment = os.environ.copy()
         environment.update(
             {
@@ -349,6 +428,4 @@ class AlpacaCliAdapter:
             payload = json.loads(completed.stdout)
         except json.JSONDecodeError as error:
             raise ValueError("Alpaca CLI returned non-JSON output") from error
-        if not isinstance(payload, dict):
-            raise ValueError("Alpaca CLI returned an unexpected response shape")
         return payload

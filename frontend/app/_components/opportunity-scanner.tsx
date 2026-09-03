@@ -66,6 +66,7 @@ export function OpportunityScanner({
           max_risk_pct: 0.01,
           min_confidence: Math.min(0.9, Math.max(0.55, candidate.conviction)),
           target_dte: 30,
+          max_loss_cap_dollars: candidate.signal_tier === "exploration" ? 200 : null,
         });
         onSnapshot(snapshot);
       } catch (analysisError) {
@@ -95,9 +96,9 @@ export function OpportunityScanner({
 
       <section className="scanner-kpis" aria-label="Scanner summary">
         <article><Search size={18} aria-hidden="true" /><div><span>Universe</span><strong>{scanner.scanned_count}/{scanner.universe_size}</strong><small>large-cap names scanned</small></div></article>
-        <article><Crosshair size={18} aria-hidden="true" /><div><span>Actionable now</span><strong>{scanner.actionable_count}</strong><small>above {Math.round(scanner.minimum_conviction * 100)}% conviction</small></div></article>
+        <article><Crosshair size={18} aria-hidden="true" /><div><span>Council-ready</span><strong>{scanner.actionable_count}</strong><small>production + $200 exploration</small></div></article>
         <article><CheckCircle2 size={18} aria-hidden="true" /><div><span>Primary trigger</span><strong>{scanner.ema_period} EMA</strong><small>confirmed price crossover</small></div></article>
-        <article><ShieldAlert size={18} aria-hidden="true" /><div><span>Execution</span><strong>Paper only</strong><small>council + risk + liquidity gates</small></div></article>
+        <article><ShieldAlert size={18} aria-hidden="true" /><div><span>Intraday execution</span><strong>Preview only</strong><small>holdout gate failed; daily tier eligible</small></div></article>
       </section>
 
       {lead && (
@@ -110,6 +111,7 @@ export function OpportunityScanner({
                 {lead.direction === "bullish" ? <ArrowUpRight size={15} /> : lead.direction === "bearish" ? <ArrowDownRight size={15} /> : null}
                 {patternLabel(lead.pattern)}
               </b>
+              <b>{lead.signal_tier} · ${lead.risk_cap_dollars.toFixed(0)} max</b>
             </div>
             <p>{lead.evidence.slice(0, 3).join(" · ")}</p>
           </div>
@@ -134,11 +136,11 @@ export function OpportunityScanner({
               {scanner.candidates.map((candidate) => (
                 <tr key={candidate.symbol} className={candidate.actionable ? "actionable-row" : ""}>
                   <td><span className="scanner-rank">{candidate.rank.toString().padStart(2, "0")}</span></td>
-                  <td><strong>{candidate.symbol}</strong><small>{patternLabel(candidate.pattern)}</small></td>
+                  <td><strong>{candidate.symbol}</strong><small>{patternLabel(candidate.pattern)} · {candidate.signal_tier}</small></td>
                   <td><strong>${candidate.current_price.toFixed(2)}</strong><small>EMA ${candidate.ema_18.toFixed(2)}</small></td>
                   <td><div className="mini-conviction"><span style={{ width: `${candidate.conviction * 100}%` }} /></div><small>{Math.round(candidate.conviction * 100)}%</small></td>
                   <td className={candidate.relative_strength_20d >= 0 ? "positive" : "negative"}>{candidate.relative_strength_20d >= 0 ? "+" : ""}{(candidate.relative_strength_20d * 100).toFixed(1)}%</td>
-                  <td><strong>{candidate.volume_ratio.toFixed(2)}×</strong><small>20-day average</small></td>
+                  <td><strong>{candidate.volume_ratio.toFixed(2)}×</strong><small>20-bar average</small></td>
                   <td><span className={`liquidity-chip ${candidate.liquidity_tier}`}>{candidate.liquidity_tier.replace("_", " ")}</span><small>{compactDollars(candidate.average_dollar_volume)} / day</small></td>
                   <td>
                     <button type="button" className="scanner-analyze" onClick={() => analyze(candidate)} disabled={isPending || !candidate.actionable} title={candidate.actionable ? "Send to the voting council" : "Waiting for a confirmed crossover"}>

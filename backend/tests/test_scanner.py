@@ -34,6 +34,8 @@ def test_bullish_18_ema_cross_is_actionable_only_with_confirmations() -> None:
     assert candidate.market_aligned is True
     assert candidate.conviction >= 0.60
     assert candidate.actionable is True
+    assert candidate.signal_tier == "production"
+    assert candidate.risk_cap_dollars == 650
     assert candidate.option_bias == "call_debit_spread"
 
 

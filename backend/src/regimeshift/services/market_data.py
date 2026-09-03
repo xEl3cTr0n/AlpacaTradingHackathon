@@ -14,6 +14,10 @@ class MarketDataProvider(Protocol):
         self, symbols: list[str], days: int = 180
     ) -> dict[str, list[PricePoint]]: ...
 
+    def get_intraday_history(
+        self, symbols: list[str], days: int = 10, bar_minutes: int = 15
+    ) -> dict[str, list[PricePoint]]: ...
+
 
 class DemoMarketDataProvider:
     """Deterministic market tape for demos, tests, and closed-market development."""
@@ -48,6 +52,33 @@ class DemoMarketDataProvider:
         self, symbols: list[str], days: int = 180
     ) -> dict[str, list[PricePoint]]:
         return {symbol.upper(): self._get_prices(symbol, days) for symbol in symbols}
+
+    def get_intraday_history(
+        self, symbols: list[str], days: int = 10, bar_minutes: int = 15
+    ) -> dict[str, list[PricePoint]]:
+        count = max(100, days * 26)
+        end = datetime.now(UTC).replace(second=0, microsecond=0)
+        output: dict[str, list[PricePoint]] = {}
+        for symbol in symbols:
+            randomizer = random.Random(f"regimeshift:intraday:{symbol.upper()}")
+            price = 525.0 if symbol.upper() == "SPY" else 460.0
+            points: list[PricePoint] = []
+            for index in range(count):
+                shock = randomizer.gauss(0, 0.0025)
+                price *= 1 + 0.00008 + math.sin(index / 11) * 0.0007 + shock
+                timestamp = end - timedelta(minutes=(count - 1 - index) * bar_minutes)
+                points.append(
+                    PricePoint(
+                        timestamp=timestamp,
+                        open=round(price * (1 - shock / 3), 2),
+                        high=round(price * (1 + abs(shock) / 2 + 0.0005), 2),
+                        low=round(price * (1 - abs(shock) / 2 - 0.0005), 2),
+                        close=round(price, 2),
+                        volume=int(1_500_000 + randomizer.random() * 900_000),
+                    )
+                )
+            output[symbol.upper()] = points
+        return output
 
     def get_context(self, symbol: str) -> MarketContext:
         symbol = symbol.upper()
@@ -109,6 +140,45 @@ class AlpacaMarketDataProvider:
                     volume=int(bar.volume),
                 )
                 for bar in bars
+            ]
+        return histories
+
+    def get_intraday_history(
+        self, symbols: list[str], days: int = 10, bar_minutes: int = 15
+    ) -> dict[str, list[PricePoint]]:
+        from alpaca.data.enums import Adjustment, DataFeed
+        from alpaca.data.requests import StockBarsRequest
+        from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+
+        normalized = [symbol.upper() for symbol in symbols]
+        now = datetime.now(UTC)
+        current_bucket = now.replace(
+            minute=(now.minute // bar_minutes) * bar_minutes,
+            second=0,
+            microsecond=0,
+        )
+        end = current_bucket - timedelta(microseconds=1)
+        request = StockBarsRequest(
+            symbol_or_symbols=normalized,
+            timeframe=TimeFrame(bar_minutes, TimeFrameUnit.Minute),
+            start=end - timedelta(days=days),
+            end=end,
+            feed=DataFeed.IEX,
+            adjustment=Adjustment.ALL,
+        )
+        bar_set = self.stock_client.get_stock_bars(request)
+        histories: dict[str, list[PricePoint]] = {}
+        for symbol in normalized:
+            histories[symbol] = [
+                PricePoint(
+                    timestamp=bar.timestamp,
+                    open=float(bar.open),
+                    high=float(bar.high),
+                    low=float(bar.low),
+                    close=float(bar.close),
+                    volume=int(bar.volume),
+                )
+                for bar in bar_set[symbol]
             ]
         return histories
 

@@ -73,12 +73,14 @@ def relative_strength_index(values: list[float], period: int = 14) -> list[float
 
 
 class LargeCapScanner:
-    """Ranks liquid large caps; only validated 18 EMA crosses are actionable."""
+    """Ranks liquid large caps using daily or intraday 18 EMA crosses."""
 
     benchmark_symbol = "SPY"
     ema_period = 18
     trend_period = 50
     minimum_conviction = 0.60
+    exploration_conviction = 0.55
+    exploration_risk_cap = 200.0
     minimum_average_dollar_volume = 100_000_000
     interval_minutes = 15
 
@@ -88,6 +90,9 @@ class LargeCapScanner:
         *,
         limit: int = 12,
         source: str = "market data",
+        timeframe: str = "1Day",
+        liquidity_histories: dict[str, list[PricePoint]] | None = None,
+        annualization_periods: int = 252,
     ) -> ScannerSnapshot:
         benchmark = histories.get(self.benchmark_symbol, [])
         if len(benchmark) < 60:
@@ -98,7 +103,19 @@ class LargeCapScanner:
             points = histories.get(symbol, [])
             if len(points) < 60:
                 continue
-            candidate = self.score(symbol, name, points, benchmark, len(points) - 1)
+            candidate = self.score(
+                symbol,
+                name,
+                points,
+                benchmark,
+                len(points) - 1,
+                liquidity_points=(liquidity_histories or histories).get(symbol),
+                trend_points=(liquidity_histories or {}).get(symbol),
+                benchmark_trend_points=(liquidity_histories or {}).get(
+                    self.benchmark_symbol
+                ),
+                annualization_periods=annualization_periods,
+            )
             if candidate is not None:
                 candidates.append(candidate)
 
@@ -118,16 +135,23 @@ class LargeCapScanner:
             generated_at=max(point.timestamp for point in benchmark),
             source=source,
             interval_minutes=self.interval_minutes,
+            timeframe=timeframe,
             universe_size=len(LARGE_CAP_UNIVERSE),
             scanned_count=len(candidates),
             actionable_count=sum(candidate.actionable for candidate in candidates),
             minimum_conviction=self.minimum_conviction,
             ema_period=self.ema_period,
             methodology=(
-                "Two-stage liquidity screen: large-cap universe and $100M 20-session "
+                "15-minute 18 EMA crossover and 18/50 trend alignment, confirmed by SPY. "
+                "Daily $100M average dollar volume is the first liquidity gate; contract "
+                "quotes and open interest are checked before execution. Production starts "
+                "at 60% conviction. The 55–60% exploration tier has a hard $200 loss cap."
+                if timeframe == "15Min"
+                else "Two-stage liquidity screen: large-cap universe and $100M 20-session "
                 "average dollar volume, followed by contract bid/ask and open-interest "
-                "checks before execution. Actionable signals require a price/18 EMA cross, "
-                "18/50 EMA trend alignment, SPY trend confirmation, and 60% conviction."
+                "checks before execution. Production signals require a price/18 EMA cross, "
+                "trend and SPY confirmation, and 60% conviction; 55–60% exploration "
+                "signals have a hard $200 loss cap."
             ),
             candidates=ranked,
         )
@@ -139,6 +163,11 @@ class LargeCapScanner:
         points: list[PricePoint],
         benchmark: list[PricePoint],
         index: int,
+        *,
+        liquidity_points: list[PricePoint] | None = None,
+        trend_points: list[PricePoint] | None = None,
+        benchmark_trend_points: list[PricePoint] | None = None,
+        annualization_periods: int = 252,
     ) -> ScannerCandidate | None:
         if index < 60 or index >= len(points):
             return None
@@ -148,15 +177,15 @@ class LargeCapScanner:
         rsi_14 = relative_strength_index(closes)
         current = points[index]
 
-        benchmark_by_date = {point.timestamp.date(): point for point in benchmark}
-        benchmark_dates = [point.timestamp.date() for point in benchmark]
-        current_date = current.timestamp.date()
-        if current_date not in benchmark_by_date:
+        benchmark_by_timestamp = {
+            point.timestamp: position for position, point in enumerate(benchmark)
+        }
+        benchmark_index = benchmark_by_timestamp.get(current.timestamp)
+        historical_benchmark_index = benchmark_by_timestamp.get(
+            points[index - 20].timestamp
+        )
+        if benchmark_index is None or historical_benchmark_index is None:
             return None
-        historical_date = points[index - 20].timestamp.date()
-        if historical_date not in benchmark_by_date:
-            return None
-        benchmark_index = benchmark_dates.index(current_date)
         if benchmark_index < 55:
             return None
         benchmark_closes = [point.close for point in benchmark[: benchmark_index + 1]]
@@ -174,6 +203,34 @@ class LargeCapScanner:
             benchmark_closes[-1] < benchmark_ema_50[-1]
             and benchmark_ema_50[-1] < benchmark_ema_50[-6]
         )
+        if trend_points and benchmark_trend_points:
+            available_trend = [
+                point for point in trend_points if point.timestamp.date() < current.timestamp.date()
+            ]
+            available_benchmark_trend = [
+                point
+                for point in benchmark_trend_points
+                if point.timestamp.date() < current.timestamp.date()
+            ]
+            if len(available_trend) < 55 or len(available_benchmark_trend) < 55:
+                return None
+            trend_closes = [point.close for point in available_trend]
+            trend_18 = exponential_moving_average(trend_closes, self.ema_period)
+            trend_50 = exponential_moving_average(trend_closes, self.trend_period)
+            daily_benchmark_closes = [point.close for point in available_benchmark_trend]
+            daily_benchmark_50 = exponential_moving_average(
+                daily_benchmark_closes, self.trend_period
+            )
+            bullish_trend = trend_18[-1] > trend_50[-1] and trend_18[-1] > trend_18[-6]
+            bearish_trend = trend_18[-1] < trend_50[-1] and trend_18[-1] < trend_18[-6]
+            benchmark_bullish = (
+                daily_benchmark_closes[-1] > daily_benchmark_50[-1]
+                and daily_benchmark_50[-1] > daily_benchmark_50[-6]
+            )
+            benchmark_bearish = (
+                daily_benchmark_closes[-1] < daily_benchmark_50[-1]
+                and daily_benchmark_50[-1] < daily_benchmark_50[-6]
+            )
 
         if bullish_trend:
             direction = Direction.BULLISH
@@ -198,12 +255,22 @@ class LargeCapScanner:
 
         direction_sign = 1 if direction == Direction.BULLISH else -1
         average_volume = mean(point.volume for point in points[index - 20 : index])
+        liquidity_points = liquidity_points or points
+        completed_liquidity = [
+            point
+            for point in liquidity_points
+            if point.timestamp.date() < current.timestamp.date()
+        ]
+        if completed_liquidity:
+            liquidity_points = completed_liquidity
+        if len(liquidity_points) < 20:
+            return None
         average_dollar_volume = mean(
-            point.close * point.volume for point in points[index - 20 : index]
+            point.close * point.volume for point in liquidity_points[-20:]
         )
         volume_ratio = current.volume / max(1, average_volume)
-        benchmark_current = benchmark_by_date[current_date].close
-        benchmark_old = benchmark_by_date[historical_date].close
+        benchmark_current = benchmark[benchmark_index].close
+        benchmark_old = benchmark[historical_benchmark_index].close
         relative_strength = (closes[-1] / closes[-21] - 1) - (
             benchmark_current / benchmark_old - 1
         )
@@ -212,7 +279,7 @@ class LargeCapScanner:
             closes[position] / closes[position - 1] - 1
             for position in range(len(closes) - 20, len(closes))
         ]
-        realized_volatility = pstdev(daily_returns) * math.sqrt(252)
+        realized_volatility = pstdev(daily_returns) * math.sqrt(annualization_periods)
         exact_cross = bullish_cross or bearish_cross
 
         slope_score = min(1.0, abs(slope) / 0.04)
@@ -230,12 +297,25 @@ class LargeCapScanner:
         )
         conviction = round(min(1.0, conviction), 4)
         liquidity_qualified = average_dollar_volume >= self.minimum_average_dollar_volume
-        actionable = bool(
+        qualified_signal = bool(
             exact_cross
             and direction != Direction.SIDEWAYS
             and market_aligned
             and liquidity_qualified
-            and conviction >= self.minimum_conviction
+            and conviction >= self.exploration_conviction
+        )
+        signal_tier = (
+            "production"
+            if qualified_signal and conviction >= self.minimum_conviction
+            else "exploration"
+            if qualified_signal
+            else "watch"
+        )
+        actionable = signal_tier != "watch"
+        risk_cap_dollars = (
+            self.exploration_risk_cap if signal_tier == "exploration" else 650.0
+            if signal_tier == "production"
+            else 0.0
         )
         liquidity_tier = (
             "very_high"
@@ -263,6 +343,8 @@ class LargeCapScanner:
             option_bias=option_bias,
             conviction=conviction,
             actionable=actionable,
+            signal_tier=signal_tier,
+            risk_cap_dollars=risk_cap_dollars,
             current_price=round(current.close, 2),
             ema_18=round(ema_18[-1], 2),
             ema_50=round(ema_50[-1], 2),

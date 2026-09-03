@@ -100,13 +100,22 @@ def scanner(
     """Rank the liquid large-cap universe without placing an order."""
     try:
         provider = build_market_data_provider(settings)
-        histories = provider.get_price_history(["SPY", *LARGE_CAP_UNIVERSE], days=365)
+        symbols = ["SPY", *LARGE_CAP_UNIVERSE]
+        histories = provider.get_intraday_history(symbols, days=10, bar_minutes=15)
+        liquidity_histories = provider.get_price_history(symbols, days=120)
         source = (
-            "Alpaca IEX fully adjusted daily bars"
+            "Alpaca IEX fully adjusted 15-minute bars"
             if settings.market_data_mode.lower() == "alpaca"
-            else "deterministic demo tape"
+            else "deterministic 15-minute demo tape"
         )
-        return LargeCapScanner().scan(histories, limit=limit, source=source)
+        return LargeCapScanner().scan(
+            histories,
+            limit=limit,
+            source=source,
+            timeframe="15Min",
+            liquidity_histories=liquidity_histories,
+            annualization_periods=252 * 26,
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:

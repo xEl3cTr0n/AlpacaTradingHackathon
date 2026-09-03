@@ -47,10 +47,12 @@ def test_strategy_controls_change_policy_and_risk_budget() -> None:
         max_risk_pct=0.005,
         min_confidence=0.7,
         target_dte=45,
+        max_loss_cap_dollars=200,
     )
 
     result = DecisionPipeline(settings, DemoMarketDataProvider()).analyze("SPY", controls)
 
     assert result.strategy.name == StrategyName.BEAR_PUT_SPREAD
-    assert result.risk.max_allowed_loss == 500
+    assert result.risk.max_allowed_loss == 200
+    assert result.strategy.max_loss_dollars == 200
     assert result.controls.target_dte == 45
