@@ -1,10 +1,11 @@
 "use client";
 
-import { Bot, CheckCircle2, CircleDollarSign, Clock3, Gauge, Layers3, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Bot, CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, Layers3, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useState, useTransition } from "react";
 import { runAnalysis } from "@/app/actions";
 import { AgentCard } from "@/app/_components/agent-card";
 import { PriceChart } from "@/app/_components/price-chart";
+import { buildDecisionReceipt, decisionReceiptFilename } from "@/lib/decision-receipt";
 import type { AnalysisControls, DecisionSnapshot, InstrumentMode, StrategyMode } from "@/lib/types";
 
 const pct = (value: number, digits = 0) => `${(value * 100).toFixed(digits)}%`;
@@ -29,9 +30,20 @@ export function StrategyLab({ snapshot, onSnapshot }: { snapshot: DecisionSnapsh
     });
   }
 
+  function downloadReceipt() {
+    const receipt = buildDecisionReceipt(snapshot);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = decisionReceiptFilename(snapshot);
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMessage(`Decision receipt exported for ${snapshot.market.symbol}.`);
+  }
+
   return (
     <div className="view-stack">
-      <header className="view-heading"><div><p className="eyebrow">Autonomous strategy workbench</p><h1>Strategy Lab</h1><p>Change policy constraints, run the council, and inspect every decision.</p></div><span className="decision-chip approved"><ShieldCheck size={15} aria-hidden="true" /> Risk gate enforced</span></header>
+      <header className="view-heading"><div><p className="eyebrow">Autonomous strategy workbench</p><h1>Strategy Lab</h1><p>Change policy constraints, run the council, and inspect every decision.</p></div><div className="heading-actions"><button type="button" className="secondary-action" onClick={downloadReceipt}><Download size={15} aria-hidden="true" /> Export decision receipt</button><span className="decision-chip approved"><ShieldCheck size={15} aria-hidden="true" /> Risk gate enforced</span></div></header>
 
       <section className="strategy-controls panel" aria-labelledby="controls-title">
         <div className="controls-heading"><SlidersHorizontal size={18} aria-hidden="true" /><div><h2 id="controls-title">Run configuration</h2><p>These settings are sent to the backend policy engine.</p></div></div>

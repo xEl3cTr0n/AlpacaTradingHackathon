@@ -27,6 +27,11 @@ function compactDollars(value: number): string {
   }).format(value);
 }
 
+function tradeLabel(candidate: ScannerCandidate, actionable: boolean): string {
+  const side = candidate.direction === "bearish" ? "Sell" : "Buy";
+  return actionable ? `Run ${side} council` : `${side} watch`;
+}
+
 export function OpportunityScanner({
   initialScanner,
   onSnapshot,
@@ -124,7 +129,7 @@ export function OpportunityScanner({
         <div className="table-scroll">
           <table className="scanner-table">
             <caption>Ranked large-cap 18 EMA scanner candidates</caption>
-            <thead><tr><th>Rank</th><th>Symbol / setup</th><th>Price vs 18 EMA</th><th>Conviction</th><th>Relative strength</th><th>Volume</th><th>Liquidity</th><th>Agent handoff</th></tr></thead>
+            <thead><tr><th>Rank</th><th>Symbol / setup</th><th>Price vs 18 EMA</th><th>Conviction</th><th>Relative strength</th><th>Volume</th><th>Liquidity</th><th>Trade signal</th></tr></thead>
             <tbody>
               {scanner.candidates.map((candidate) => (
                 <tr key={candidate.symbol} className={candidate.actionable ? "actionable-row" : ""}>
@@ -137,7 +142,7 @@ export function OpportunityScanner({
                   <td><span className={`liquidity-chip ${candidate.liquidity_tier}`}>{candidate.liquidity_tier.replace("_", " ")}</span><small>{compactDollars(candidate.average_dollar_volume)} / day</small></td>
                   <td>
                     <button type="button" className="scanner-analyze" onClick={() => analyze(candidate)} disabled={isPending || !candidate.actionable} title={candidate.actionable ? "Send to the voting council" : "Waiting for a confirmed crossover"}>
-                      {isPending && activeSymbol === candidate.symbol ? "Running…" : candidate.actionable ? "Run council" : "Watch"}
+                      {isPending && activeSymbol === candidate.symbol ? "Running…" : tradeLabel(candidate, candidate.actionable)}
                     </button>
                   </td>
                 </tr>

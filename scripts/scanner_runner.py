@@ -76,6 +76,15 @@ def run_cycle(
         return summary
 
     cli = AlpacaCliAdapter(settings)
+    client_order_id = cli.signal_client_order_id(signal_key)
+    existing_order = cli.existing_order(client_order_id)
+    if existing_order is not None:
+        summary["execution"] = {
+            "status": "duplicate_blocked",
+            "reason": "Alpaca already has an order for this daily signal",
+            "order": existing_order,
+        }
+        return summary
     verification = cli.verify()
     if execute and not bool(verification["clock"].get("is_open")):
         summary["cli"] = verification
@@ -86,7 +95,12 @@ def run_cycle(
         return summary
 
     plan = cli.prepare_spread(snapshot)
-    result = cli.submit_or_preview(snapshot, plan, execute=execute)
+    result = cli.submit_or_preview(
+        snapshot,
+        plan,
+        execute=execute,
+        client_order_id=client_order_id,
+    )
     if result["status"] == "submitted":
         submitted_signals.add(signal_key)
         STATE_PATH.write_text(

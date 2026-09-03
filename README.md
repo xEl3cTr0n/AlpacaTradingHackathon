@@ -22,6 +22,8 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - Portfolio command center with Alpaca paper P&L, positions, and recent orders.
 - Interactive Strategy Lab for mode, risk budget, confidence, and expiration controls.
 - Agent Ops view showing the decision pipeline and API/MCP/CLI connection state.
+- Portable JSON decision receipts containing the full council vote, deterministic
+  risk-gate result, policy inputs, market provenance, and Alpaca tool evidence.
 
 ## Quick start
 
@@ -121,6 +123,19 @@ Run continuously every 15 minutes:
 ```bash
 backend/.venv/bin/python scripts/scanner_runner.py --loop --interval-minutes 15
 ```
+
+### Scheduled paper execution
+
+Vercel serves the dashboard and reads Alpaca telemetry, but it does not keep the
+CLI runner alive. The included `RegimeShift paper trading` GitHub Actions workflow
+runs the scanner every 15 minutes during the broad US market-hours window.
+
+Add `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as GitHub Actions repository secrets.
+The workflow remains preview-only until the repository variable
+`ENABLE_PAPER_ORDERS` is explicitly set to `true`. With that variable enabled,
+orders still require an actionable crossover, council approval, the deterministic
+Risk gate, live option liquidity, an open market, and duplicate-signal protection.
+All orders are forced to the Alpaca paper environment.
 
 Add `--execute` only when you intentionally want eligible signals submitted to
 Alpaca paper trading. The runner skips closed markets and persists a local,

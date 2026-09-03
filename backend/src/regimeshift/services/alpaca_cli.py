@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -217,7 +218,11 @@ class AlpacaCliAdapter:
         }
 
     def submit_or_preview(
-        self, snapshot: DecisionSnapshot, plan: dict[str, Any], execute: bool
+        self,
+        snapshot: DecisionSnapshot,
+        plan: dict[str, Any],
+        execute: bool,
+        client_order_id: str | None = None,
     ) -> dict[str, Any]:
         allowed = (
             snapshot.risk.approved
@@ -245,7 +250,7 @@ class AlpacaCliAdapter:
             "--time-in-force",
             "day",
             "--client-order-id",
-            f"regimeshift-{snapshot.decision_id}",
+            client_order_id or f"regimeshift-{snapshot.decision_id}",
             "--legs",
             json.dumps(plan["legs"], separators=(",", ":")),
             "--quiet",
@@ -258,6 +263,34 @@ class AlpacaCliAdapter:
             "allowed": allowed,
             "paper_only": True,
             "order": result,
+        }
+
+    @staticmethod
+    def signal_client_order_id(signal_key: str) -> str:
+        """Return a stable, Alpaca-safe ID for one symbol/date/pattern signal."""
+        digest = hashlib.sha256(signal_key.encode("utf-8")).hexdigest()[:24]
+        return f"regimeshift-signal-{digest}"
+
+    def existing_order(self, client_order_id: str) -> dict[str, str] | None:
+        """Check Alpaca itself so duplicate protection survives ephemeral runners."""
+        from alpaca.common.exceptions import APIError
+        from alpaca.trading.client import TradingClient
+
+        client = TradingClient(
+            self.settings.alpaca_api_key,
+            self.settings.alpaca_secret_key.get_secret_value(),
+            paper=True,
+        )
+        try:
+            order = client.get_order_by_client_id(client_order_id)
+        except APIError as error:
+            if error.status_code == 404:
+                return None
+            raise
+        return {
+            "id": str(order.id),
+            "status": str(getattr(order.status, "value", order.status)),
+            "client_order_id": order.client_order_id,
         }
 
     @staticmethod
