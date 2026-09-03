@@ -11,19 +11,22 @@ import {
   LockKeyhole,
   PanelLeftClose,
   Radio,
+  ScanSearch,
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
 import { useState } from "react";
 import { AgentOps } from "@/app/_components/agent-ops";
+import { OpportunityScanner } from "@/app/_components/opportunity-scanner";
 import { PortfolioView } from "@/app/_components/portfolio-view";
 import { StrategyLab } from "@/app/_components/strategy-lab";
-import type { DecisionSnapshot, PlatformSnapshot } from "@/lib/types";
+import type { DecisionSnapshot, PlatformSnapshot, ScannerSnapshot } from "@/lib/types";
 
-type View = "portfolio" | "strategy" | "ops";
+type View = "portfolio" | "scanner" | "strategy" | "ops";
 
 const navItems = [
   { id: "portfolio" as const, label: "Portfolio", icon: WalletCards },
+  { id: "scanner" as const, label: "Scanner", icon: ScanSearch },
   { id: "strategy" as const, label: "Strategy Lab", icon: FlaskConical },
   { id: "ops" as const, label: "Agent Ops", icon: Bot },
 ];
@@ -31,9 +34,11 @@ const navItems = [
 export function Dashboard({
   initialSnapshot,
   initialPlatform,
+  initialScanner,
 }: {
   initialSnapshot: DecisionSnapshot;
   initialPlatform: PlatformSnapshot;
+  initialScanner: ScannerSnapshot;
 }) {
   const [view, setView] = useState<View>("portfolio");
   const [snapshot, setSnapshot] = useState(initialSnapshot);
@@ -79,6 +84,7 @@ export function Dashboard({
         </nav>
         <div className="platform-content" id="platform-content">
           {view === "portfolio" && <PortfolioView platform={initialPlatform} onOpenStrategy={() => setView("strategy")} />}
+          {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} />}
           {view === "strategy" && <StrategyLab snapshot={snapshot} onSnapshot={setSnapshot} />}
           {view === "ops" && <AgentOps platform={initialPlatform} snapshot={snapshot} />}
         </div>

@@ -1,7 +1,7 @@
 "use server";
 
-import { analyzeSnapshot } from "@/lib/api";
-import type { AnalysisControls, DecisionSnapshot } from "@/lib/types";
+import { analyzeSnapshot, fetchScanner } from "@/lib/api";
+import type { AnalysisControls, DecisionSnapshot, ScannerSnapshot } from "@/lib/types";
 
 export async function runAnalysis(
   symbol: string,
@@ -12,4 +12,8 @@ export async function runAnalysis(
     throw new Error("Use a valid ticker containing letters or a period.");
   }
   return analyzeSnapshot(normalized, controls);
+}
+
+export async function refreshScanner(): Promise<ScannerSnapshot> {
+  return fetchScanner(12);
 }

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from regimeshift.config import Settings, get_settings
@@ -9,7 +9,9 @@ from regimeshift.domain.models import (
     AnalyzeRequest,
     DecisionSnapshot,
     PlatformSnapshot,
+    ScannerSnapshot,
 )
+from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.market_data import build_market_data_provider
 from regimeshift.services.platform import build_platform_provider
@@ -87,4 +89,27 @@ def platform(settings: SettingsDependency) -> PlatformSnapshot:
     except Exception as error:
         raise HTTPException(
             status_code=502, detail=f"Paper account request failed: {error}"
+        ) from error
+
+
+@app.get("/api/v1/scanner", response_model=ScannerSnapshot)
+def scanner(
+    settings: SettingsDependency,
+    limit: int = Query(default=12, ge=1, le=len(LARGE_CAP_UNIVERSE)),
+) -> ScannerSnapshot:
+    """Rank the liquid large-cap universe without placing an order."""
+    try:
+        provider = build_market_data_provider(settings)
+        histories = provider.get_price_history(["SPY", *LARGE_CAP_UNIVERSE], days=365)
+        source = (
+            "Alpaca IEX fully adjusted daily bars"
+            if settings.market_data_mode.lower() == "alpaca"
+            else "deterministic demo tape"
+        )
+        return LargeCapScanner().scan(histories, limit=limit, source=source)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail=f"Scanner market-data request failed: {error}"
         ) from error

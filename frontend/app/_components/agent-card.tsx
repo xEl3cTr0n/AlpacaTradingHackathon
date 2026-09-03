@@ -1,8 +1,10 @@
-import { Activity, BookOpen, Scale, ShieldCheck, TrendingUp } from "lucide-react";
+import { Activity, BookOpen, ChartNoAxesCombined, Scale, ShieldCheck, TrendingUp } from "lucide-react";
 import type { AgentVerdict } from "@/lib/types";
 
 const icons = {
   Technical: Activity,
+  Swing: ChartNoAxesCombined,
+  Rotation: ChartNoAxesCombined,
   Research: BookOpen,
   Bull: TrendingUp,
   Bear: Scale,
@@ -28,4 +30,3 @@ export function AgentCard({ verdict }: { verdict: AgentVerdict }) {
     </article>
   );
 }
-

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "alpaca": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["scripts/run-alpaca-mcp.sh"]
+    }
+  }
+}

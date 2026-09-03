@@ -1,9 +1,17 @@
-import type { DecisionSnapshot, PlatformSnapshot, PricePoint } from "@/lib/types";
+import type {
+  DecisionSnapshot,
+  PlatformSnapshot,
+  PricePoint,
+  ScannerSnapshot,
+} from "@/lib/types";
 
 function demoPrices(): PricePoint[] {
   const start = Date.UTC(2026, 4, 21);
   return Array.from({ length: 100 }, (_, index) => ({
     timestamp: new Date(start + index * 86_400_000).toISOString(),
+    open: Number((522.7 + index * 0.48 + Math.sin(index / 6) * 6.8).toFixed(2)),
+    high: Number((524.2 + index * 0.48 + Math.sin(index / 6) * 6.8).toFixed(2)),
+    low: Number((521.9 + index * 0.48 + Math.sin(index / 6) * 6.8).toFixed(2)),
     close: Number((523 + index * 0.48 + Math.sin(index / 6) * 6.8).toFixed(2)),
     volume: Math.round(62_000_000 + (Math.sin(index / 4) + 1) * 9_000_000),
   }));
@@ -44,6 +52,48 @@ export function getDemoSnapshot(): DecisionSnapshot {
       rationale:
         "Trend score +0.61 with RSI 61.4; realized volatility is in the 58% rolling percentile.",
     },
+    swing: {
+      signal: "bullish_breakout",
+      confidence: 0.74,
+      lookback: 20,
+      swing_low: 558.21,
+      swing_high: 568.44,
+      range_position: 1,
+      rationale: "Close confirmed a 20-session swing-high breakout with positive momentum.",
+    },
+    sector_rotation: {
+      benchmark_symbol: "SPY",
+      as_of: prices.at(-1)?.timestamp ?? new Date().toISOString(),
+      signal: "risk_on",
+      confidence: 0.76,
+      breadth: 0.64,
+      leaders: ["XLK", "XLI", "XLF"],
+      laggards: ["XLP", "XLU", "XLRE"],
+      sectors: [
+        ["XLK", "Technology", 0.042, 0.096, 0.025, 0.051, 0.035, "leading"],
+        ["XLI", "Industrials", 0.035, 0.082, 0.018, 0.037, 0.026, "leading"],
+        ["XLF", "Financials", 0.031, 0.071, 0.014, 0.026, 0.019, "leading"],
+        ["XLY", "Consumer Discretionary", 0.027, 0.064, 0.01, 0.019, 0.014, "leading"],
+        ["XLC", "Communication Services", 0.024, 0.058, 0.007, 0.013, 0.009, "leading"],
+        ["XLB", "Materials", 0.02, 0.052, 0.003, 0.007, 0.005, "leading"],
+        ["XLE", "Energy", 0.018, 0.048, 0.001, 0.003, 0.002, "leading"],
+        ["XLV", "Health Care", 0.013, 0.04, -0.004, -0.005, -0.004, "lagging"],
+        ["XLP", "Consumer Staples", 0.009, 0.034, -0.008, -0.011, -0.009, "lagging"],
+        ["XLU", "Utilities", 0.006, 0.029, -0.011, -0.016, -0.013, "lagging"],
+        ["XLRE", "Real Estate", 0.003, 0.023, -0.014, -0.022, -0.017, "lagging"],
+      ].map(([symbol, name, oneMonth, threeMonth, relative1m, relative3m, score, phase], index) => ({
+        rank: index + 1,
+        symbol: symbol as string,
+        name: name as string,
+        one_month_return: oneMonth as number,
+        three_month_return: threeMonth as number,
+        relative_strength_1m: relative1m as number,
+        relative_strength_3m: relative3m as number,
+        rotation_score: score as number,
+        phase: phase as "leading" | "lagging",
+      })),
+      rationale: "64% of sectors outperform SPY; cyclical leadership is broadening.",
+    },
     agents: [
       {
         agent: "Technical",
@@ -53,11 +103,25 @@ export function getDemoSnapshot(): DecisionSnapshot {
         evidence: ["20-day EMA is above the 50-day EMA", "RSI confirms momentum without an extreme reading"],
       },
       {
+        agent: "Swing",
+        stance: "support",
+        confidence: 0.74,
+        summary: "Bullish breakout",
+        evidence: ["20-session high cleared", "Three-session momentum confirmed"],
+      },
+      {
         agent: "Research",
         stance: "neutral",
         confidence: 0.62,
         summary: "No concentrated headline-risk cluster detected.",
         evidence: ["Macro catalysts remain the primary near-term event risk"],
+      },
+      {
+        agent: "Rotation",
+        stance: "support",
+        confidence: 0.76,
+        summary: "Sector leadership is risk on.",
+        evidence: ["Leadership breadth versus SPY is 64%", "Leaders: XLK, XLI, XLF", "Laggards: XLP, XLU, XLRE"],
       },
       {
         agent: "Bull",
@@ -81,9 +145,35 @@ export function getDemoSnapshot(): DecisionSnapshot {
         evidence: ["Defined-risk structure", "Maximum loss remains within the 1% account budget"],
       },
     ],
+    council: {
+      votes: [
+        { agent: "Technical", vote: "support", confidence: 0.78, reason: "Bullish regime aligns with the proposal." },
+        { agent: "Swing", vote: "support", confidence: 0.74, reason: "Confirmed 20-session breakout." },
+        { agent: "Rotation", vote: "support", confidence: 0.76, reason: "Risk-on breadth confirms the direction." },
+        { agent: "Research", vote: "abstain", confidence: 0.62, reason: "No concentrated headline-risk cluster." },
+        { agent: "Advocacy", vote: "support", confidence: 0.83, reason: "Bull case outweighs the counter-thesis." },
+      ],
+      support_count: 4,
+      oppose_count: 0,
+      abstain_count: 1,
+      weighted_support: 1,
+      approval_threshold: 0.52,
+      quorum_met: true,
+      approved: true,
+    },
+    tool_evidence: [
+      { provider: "Alpaca Trading API", capability: "Market and paper-account telemetry", status: "used", summary: "Normalized bars, news, and account state." },
+      { provider: "Alpaca MCP", capability: "Agent-native research", status: "configured", summary: "Read-only stock, news, options, and account tools." },
+      { provider: "Alpaca CLI", capability: "Paper contract discovery and execution", status: "enabled", summary: "Risk-approved XSP multi-leg orders only." },
+    ],
     strategy: {
       name: "bull_call_spread",
-      display_name: "Bull call debit spread",
+      display_name: "XSP Bull call debit spread",
+      signal_symbol: "SPY",
+      underlying_symbol: "XSP",
+      instrument_type: "index_option",
+      option_style: "European",
+      settlement: "cash",
       thesis: "Participate in upside momentum while capping premium at risk.",
       structure: ["Buy call near 0.55 delta", "Sell higher-strike call near 0.30 delta"],
       max_loss_dollars: 650,
@@ -112,6 +202,7 @@ export function getDemoSnapshot(): DecisionSnapshot {
     },
     controls: {
       strategy_mode: "adaptive",
+      instrument_mode: "auto",
       max_risk_pct: 0.01,
       min_confidence: 0.55,
       target_dte: 30,
@@ -157,8 +248,8 @@ export function getDemoPlatform(): PlatformSnapshot {
     ],
     integrations: [
       { id: "trading-api", name: "Alpaca Trading API", status: "setup_required", detail: "Add paper credentials to the root .env", capability: "paper account, portfolio, orders, news, and market data" },
-      { id: "mcp", name: "Alpaca MCP Server", status: "not_connected", detail: "Enable after configuring the Alpaca MCP server", capability: "agent-native account, news, and options tools" },
-      { id: "cli", name: "Alpaca CLI", status: "not_connected", detail: "Use for operator inspection and reproducible demos", capability: "terminal account and order inspection" },
+      { id: "mcp", name: "Alpaca MCP Server", status: "configured", detail: "Repo-scoped read-only MCP runs outside Vercel", capability: "agent-native account, news, and options tools" },
+      { id: "cli", name: "Alpaca CLI", status: "external_runner", detail: "Pinned paper-only runner handles gated execution", capability: "contract discovery and multi-leg paper orders" },
     ],
     activity: [
       { timestamp: new Date(now - 120_000).toISOString(), source: "Risk", title: "Trade preview approved", detail: "Maximum modeled loss is inside the 1% account budget.", status: "success" },
@@ -167,5 +258,57 @@ export function getDemoPlatform(): PlatformSnapshot {
       { timestamp: new Date(now - 300_000).toISOString(), source: "API", title: "Market snapshot received", detail: "Bars, news, and option telemetry normalized.", status: "complete" },
     ],
     generated_at: new Date(now).toISOString(),
+  };
+}
+
+export function getDemoScanner(): ScannerSnapshot {
+  const asOf = new Date().toISOString();
+  const rows = [
+    ["NVDA", "NVIDIA", "bullish_18ema_cross", "bullish", 0.78, 184.62, 181.94, 174.83, 1.42, 0.057, "very_high"],
+    ["JPM", "JPMorgan Chase", "bearish_18ema_cross", "bearish", 0.69, 292.14, 294.03, 298.77, 1.28, -0.031, "high"],
+    ["MSFT", "Microsoft", "bullish_trend_watch", "bullish", 0.54, 518.33, 511.48, 502.16, 0.94, 0.022, "very_high"],
+    ["AMZN", "Amazon", "bullish_trend_watch", "bullish", 0.51, 228.76, 224.91, 219.02, 1.07, 0.018, "very_high"],
+    ["XOM", "Exxon Mobil", "bearish_trend_watch", "bearish", 0.47, 116.04, 117.28, 119.45, 0.83, -0.014, "high"],
+    ["AAPL", "Apple", "no_setup", "sideways", 0.15, 229.84, 229.31, 227.77, 0.88, -0.004, "very_high"],
+  ] as const;
+  return {
+    generated_at: asOf,
+    source: "offline scanner preview",
+    interval_minutes: 15,
+    universe_size: 24,
+    scanned_count: 24,
+    actionable_count: 2,
+    minimum_conviction: 0.6,
+    ema_period: 18,
+    methodology:
+      "Large-cap and $100M dollar-volume screen, followed by 18 EMA cross, trend, SPY, relative-strength, and volume confirmation.",
+    candidates: rows.map((row, index) => ({
+      rank: index + 1,
+      symbol: row[0],
+      name: row[1],
+      as_of: asOf,
+      pattern: row[2],
+      direction: row[3],
+      option_bias:
+        row[3] === "bullish" ? "call_debit_spread" : row[3] === "bearish" ? "put_debit_spread" : "no_trade",
+      conviction: row[4],
+      actionable: index < 2,
+      current_price: row[5],
+      ema_18: row[6],
+      ema_50: row[7],
+      ema_18_slope_5d: row[3] === "bearish" ? -0.018 : row[3] === "bullish" ? 0.021 : 0.001,
+      rsi_14: row[3] === "bearish" ? 41.8 : row[3] === "bullish" ? 62.4 : 50.2,
+      volume_ratio: row[8],
+      relative_strength_20d: row[9],
+      realized_volatility: 0.29,
+      average_dollar_volume: row[10] === "very_high" ? 7_800_000_000 : 1_840_000_000,
+      market_aligned: row[3] !== "sideways",
+      liquidity_tier: row[10],
+      evidence: [
+        `Price ${row[5]} vs EMA(18) ${row[6]}`,
+        `20-session relative strength vs SPY ${(row[9] * 100).toFixed(1)}%`,
+        "Option-chain liquidity is verified only after council approval",
+      ],
+    })),
   };
 }

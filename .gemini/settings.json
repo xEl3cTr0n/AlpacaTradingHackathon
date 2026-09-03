@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/google-gemini/gemini-cli/main/schemas/settings.schema.json",
+  "mcpServers": {
+    "alpaca": {
+      "command": "bash",
+      "args": ["scripts/run-alpaca-mcp.sh"]
+    }
+  }
+}

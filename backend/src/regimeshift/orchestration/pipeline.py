@@ -2,22 +2,34 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from regimeshift.config import Settings
+from regimeshift.domain.council import VotingCouncil
 from regimeshift.domain.models import (
     AgentVerdict,
     AnalysisControls,
+    CouncilDecision,
     DecisionSnapshot,
     Direction,
+    InstrumentMode,
     MarketContext,
     RegimeAssessment,
     RiskDecision,
+    RotationSignal,
+    SectorRotationAssessment,
     Stance,
     StrategyMode,
     StrategyName,
     StrategyProposal,
+    SwingAssessment,
+    SwingSignal,
+    ToolEvidence,
     Volatility,
 )
 from regimeshift.domain.regime import RegimeEngine
+from regimeshift.domain.sector_rotation import SECTOR_UNIVERSE, SectorRotationEngine
+from regimeshift.domain.swing import SwingEngine
 from regimeshift.services.market_data import MarketDataProvider
+
+INDEX_OPTION_PROXIES = {"SPY": "XSP"}
 
 
 class DecisionPipeline:
@@ -25,18 +37,38 @@ class DecisionPipeline:
         self.settings = settings
         self.market_data = market_data
         self.regime_engine = RegimeEngine()
+        self.rotation_engine = SectorRotationEngine()
+        self.swing_engine = SwingEngine()
+        self.voting_council = VotingCouncil()
 
     def analyze(self, symbol: str, controls: AnalysisControls | None = None) -> DecisionSnapshot:
         controls = controls or AnalysisControls(max_risk_pct=self.settings.max_risk_per_trade_pct)
         market = self.market_data.get_context(symbol)
         regime = self.regime_engine.assess(market.prices)
+        swing = self.swing_engine.assess(market.prices)
+        rotation_symbols = [self.rotation_engine.benchmark_symbol, *SECTOR_UNIVERSE]
+        rotation = self.rotation_engine.assess(
+            self.market_data.get_price_history(rotation_symbols)
+        )
         technical = self._technical_agent(regime)
+        swing_agent = self._swing_agent(swing)
         research = self._research_agent(market)
-        bull = self._bull_agent(regime, research)
-        bear = self._bear_agent(regime, research)
-        strategy = self._select_strategy(regime, controls)
-        risk = self._risk_gate(regime, strategy, bull, bear, controls)
-        strategy.status = "approved preview" if risk.approved else "vetoed"
+        rotation_agent = self._rotation_agent(rotation)
+        bull = self._bull_agent(regime, research, rotation)
+        bear = self._bear_agent(regime, research, rotation)
+        strategy = self._select_strategy(market.symbol, regime, swing, controls)
+        council = self.voting_council.evaluate(
+            strategy.name,
+            regime,
+            swing,
+            rotation,
+            research,
+            bull,
+            bear,
+            threshold=0.52,
+        )
+        risk = self._risk_gate(regime, swing, strategy, bull, bear, council, controls)
+        strategy.status = "paper candidate" if risk.approved else "vetoed"
 
         return DecisionSnapshot(
             decision_id=str(uuid4()),
@@ -44,7 +76,19 @@ class DecisionPipeline:
             mode=self.settings.market_data_mode.lower(),
             market=market,
             regime=regime,
-            agents=[technical, research, bull, bear, self._risk_verdict(risk)],
+            swing=swing,
+            sector_rotation=rotation,
+            agents=[
+                technical,
+                swing_agent,
+                research,
+                rotation_agent,
+                bull,
+                bear,
+                self._risk_verdict(risk),
+            ],
+            council=council,
+            tool_evidence=self._tool_evidence(),
             strategy=strategy,
             risk=risk,
             controls=controls,
@@ -83,9 +127,53 @@ class DecisionPipeline:
             evidence=market.headlines[:3] or ["No recent headlines were returned"],
         )
 
-    def _bull_agent(self, regime: RegimeAssessment, research: AgentVerdict) -> AgentVerdict:
+    @staticmethod
+    def _swing_agent(swing: SwingAssessment) -> AgentVerdict:
+        stance = Stance.NEUTRAL if swing.signal == SwingSignal.NEUTRAL else Stance.SUPPORT
+        return AgentVerdict(
+            agent="Swing",
+            stance=stance,
+            confidence=swing.confidence,
+            summary=swing.signal.value.replace("_", " ").title(),
+            evidence=[
+                f"{swing.lookback}-session low {swing.swing_low:.2f}",
+                f"{swing.lookback}-session high {swing.swing_high:.2f}",
+                swing.rationale,
+            ],
+        )
+
+    def _rotation_agent(self, rotation: SectorRotationAssessment) -> AgentVerdict:
+        stance = Stance.NEUTRAL
+        if rotation.signal == RotationSignal.RISK_ON:
+            stance = Stance.SUPPORT
+        elif rotation.signal == RotationSignal.DEFENSIVE:
+            stance = Stance.OPPOSE
+        return AgentVerdict(
+            agent="Rotation",
+            stance=stance,
+            confidence=rotation.confidence,
+            summary=f"Sector leadership is {rotation.signal.value.replace('_', ' ')}.",
+            evidence=[
+                f"Leadership breadth versus SPY is {rotation.breadth:.0%}",
+                f"Leaders: {', '.join(rotation.leaders)}",
+                f"Laggards: {', '.join(rotation.laggards)}",
+            ],
+        )
+
+    def _bull_agent(
+        self,
+        regime: RegimeAssessment,
+        research: AgentVerdict,
+        rotation: SectorRotationAssessment,
+    ) -> AgentVerdict:
         aligned = regime.direction == Direction.BULLISH
-        confidence = min(0.9, regime.confidence + (0.05 if aligned else -0.14))
+        rotation_adjustment = 0.05 if rotation.signal == RotationSignal.RISK_ON else 0
+        if rotation.signal == RotationSignal.DEFENSIVE:
+            rotation_adjustment = -0.1
+        confidence = min(
+            0.9,
+            regime.confidence + (0.05 if aligned else -0.14) + rotation_adjustment,
+        )
         return AgentVerdict(
             agent="Bull",
             stance=Stance.SUPPORT if aligned else Stance.NEUTRAL,
@@ -98,13 +186,23 @@ class DecisionPipeline:
             evidence=[
                 f"Trend score is {regime.metrics.trend_score:+.2f}",
                 f"Regime confidence is {regime.confidence:.0%}",
+                f"Sector rotation is {rotation.signal.value.replace('_', ' ')}",
                 research.summary,
             ],
         )
 
-    def _bear_agent(self, regime: RegimeAssessment, research: AgentVerdict) -> AgentVerdict:
+    def _bear_agent(
+        self,
+        regime: RegimeAssessment,
+        research: AgentVerdict,
+        rotation: SectorRotationAssessment,
+    ) -> AgentVerdict:
         volatility_risk = regime.volatility == Volatility.HIGH
         confidence = 0.72 if volatility_risk else 0.56
+        if rotation.signal == RotationSignal.DEFENSIVE:
+            confidence = min(0.9, confidence + 0.1)
+        elif rotation.signal == RotationSignal.RISK_ON:
+            confidence = max(0.35, confidence - 0.05)
         return AgentVerdict(
             agent="Bear",
             stance=Stance.OPPOSE,
@@ -116,13 +214,18 @@ class DecisionPipeline:
             ),
             evidence=[
                 f"Volatility percentile is {regime.metrics.volatility_percentile:.0%}",
+                f"Sector rotation is {rotation.signal.value.replace('_', ' ')}",
                 "A close through the slow trend would invalidate directional momentum",
                 research.summary,
             ],
         )
 
     def _select_strategy(
-        self, regime: RegimeAssessment, controls: AnalysisControls
+        self,
+        signal_symbol: str,
+        regime: RegimeAssessment,
+        swing: SwingAssessment,
+        controls: AnalysisControls,
     ) -> StrategyProposal:
         account_risk = self.settings.account_equity * controls.max_risk_pct
         effective_direction = regime.direction
@@ -132,6 +235,20 @@ class DecisionPipeline:
             effective_direction = Direction.BEARISH
         elif controls.strategy_mode == StrategyMode.NEUTRAL:
             effective_direction = Direction.SIDEWAYS
+
+        index_underlying = INDEX_OPTION_PROXIES.get(signal_symbol)
+        if controls.instrument_mode == InstrumentMode.INDEX_OPTION and not index_underlying:
+            raise ValueError("Validated index-option mode currently supports only SPY→XSP signals")
+        use_index = bool(
+            index_underlying
+            and controls.instrument_mode in {InstrumentMode.AUTO, InstrumentMode.INDEX_OPTION}
+        )
+        instrument_type = (
+            InstrumentMode.INDEX_OPTION if use_index else InstrumentMode.EQUITY_OPTION
+        )
+        underlying_symbol = index_underlying if use_index and index_underlying else signal_symbol
+        option_style = "European" if use_index else "American"
+        settlement = "cash" if use_index else "physical"
 
         if effective_direction == Direction.BULLISH:
             name = StrategyName.BULL_CALL_SPREAD
@@ -160,7 +277,12 @@ class DecisionPipeline:
         max_loss = 0.0 if name == StrategyName.NO_TRADE else min(650.0, account_risk)
         return StrategyProposal(
             name=name,
-            display_name=display,
+            display_name=f"{underlying_symbol} {display}",
+            signal_symbol=signal_symbol,
+            underlying_symbol=underlying_symbol,
+            instrument_type=instrument_type,
+            option_style=option_style,
+            settlement=settlement,
             thesis=thesis,
             structure=structure,
             max_loss_dollars=max_loss,
@@ -168,6 +290,9 @@ class DecisionPipeline:
             status="pending risk review",
             entry_rules=[
                 f"Regime confidence at least {controls.min_confidence:.0%}",
+                f"Swing signal: {swing.signal.value.replace('_', ' ')}",
+                "At least 3 of 5 deterministic council votes support the proposal",
+                "Sector rotation must not materially oppose the directional thesis",
                 f"Target expiration near {controls.target_dte} DTE",
                 "Bid/ask spread and open-interest liquidity checks pass",
             ],
@@ -181,9 +306,11 @@ class DecisionPipeline:
     def _risk_gate(
         self,
         regime: RegimeAssessment,
+        swing: SwingAssessment,
         strategy: StrategyProposal,
         bull: AgentVerdict,
         bear: AgentVerdict,
+        council: CouncilDecision,
         controls: AnalysisControls,
     ) -> RiskDecision:
         max_allowed = self.settings.account_equity * controls.max_risk_pct
@@ -201,6 +328,30 @@ class DecisionPipeline:
                 "Regime confidence is below the "
                 f"{controls.min_confidence:.0%} authorization threshold"
             )
+        if not council.approved and strategy.name != StrategyName.NO_TRADE:
+            approved = False
+            reasons.append(
+                f"Council rejected the proposal: {council.support_count} support, "
+                f"{council.oppose_count} oppose, {council.abstain_count} abstain"
+            )
+        index_candidate = (
+            strategy.instrument_type == InstrumentMode.INDEX_OPTION
+            and strategy.name != StrategyName.NO_TRADE
+        )
+        if (
+            index_candidate and not 21 <= controls.target_dte <= 45
+        ):
+            approved = False
+            reasons.append("Index swing positions require a 21–45 DTE target")
+        if index_candidate and swing.signal not in {
+            SwingSignal.BULLISH_BREAKOUT,
+            SwingSignal.BEARISH_BREAKDOWN,
+        }:
+            approved = False
+            reasons.append("Validated XSP policy requires a confirmed 20-session breakout")
+        if index_candidate and regime.metrics.volatility_percentile > 0.7:
+            approved = False
+            reasons.append("Validated XSP policy excludes the top 30% volatility regime")
         if bear.confidence > bull.confidence + 0.15:
             approved = False
             reasons.append("Bear case materially outweighs the Bull case")
@@ -228,3 +379,33 @@ class DecisionPipeline:
             summary="Risk budget approved for preview." if risk.approved else "Trade vetoed.",
             evidence=risk.reasons,
         )
+
+    def _tool_evidence(self) -> list[ToolEvidence]:
+        return [
+            ToolEvidence(
+                provider="Alpaca Trading API",
+                capability="market data and paper-account telemetry",
+                status="used" if self.settings.alpaca_configured else "demo",
+                summary="Normalized price, news, account, and option-ready evidence.",
+            ),
+            ToolEvidence(
+                provider="Alpaca MCP",
+                capability="agent-native research",
+                status="connected" if self.settings.alpaca_mcp_enabled else "configured",
+                summary=(
+                    "Read-only agent toolsets are available in this runtime."
+                    if self.settings.alpaca_mcp_enabled
+                    else "Repo-scoped read-only MCP runs with Claude/Gemini outside Vercel."
+                ),
+            ),
+            ToolEvidence(
+                provider="Alpaca CLI",
+                capability="reproducible paper execution",
+                status="enabled" if self.settings.alpaca_cli_enabled else "external_runner",
+                summary=(
+                    "The autonomy runner may execute only a Risk-approved order plan."
+                    if self.settings.alpaca_cli_enabled
+                    else "Pinned paper-only runner performs contract discovery and gated orders."
+                ),
+            ),
+        ]

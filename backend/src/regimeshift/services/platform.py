@@ -30,22 +30,22 @@ def _integration_statuses(settings: Settings) -> list[IntegrationStatus]:
         IntegrationStatus(
             id="mcp",
             name="Alpaca MCP Server",
-            status="connected" if settings.alpaca_mcp_enabled else "not_connected",
+            status="connected" if settings.alpaca_mcp_enabled else "configured",
             detail=(
                 "Agent tool access is enabled"
                 if settings.alpaca_mcp_enabled
-                else "Enable after configuring the Alpaca MCP server"
+                else "Repo-scoped read-only MCP runs with Claude/Gemini outside Vercel"
             ),
             capability="agent-native account, news, and options tools",
         ),
         IntegrationStatus(
             id="cli",
             name="Alpaca CLI",
-            status="connected" if settings.alpaca_cli_enabled else "not_connected",
+            status="connected" if settings.alpaca_cli_enabled else "external_runner",
             detail=(
                 "CLI workflow is enabled"
                 if settings.alpaca_cli_enabled
-                else "Use for operator inspection and reproducible demos"
+                else "Pinned paper-only runner performs contract discovery and gated orders"
             ),
             capability="terminal account and order inspection",
         ),

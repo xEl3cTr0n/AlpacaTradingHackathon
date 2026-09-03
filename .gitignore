@@ -1,15 +1,24 @@
 .DS_Store
 .env
 .venv/
+.uv-cache/
+.uv-tools/
+.uv-bin/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.py[cod]
 node_modules/
 .next/
+.vercel/
+.vercel-auth/
+.alpaca-cli/
+.scanner-state.json
 coverage/
 dist/
 
 
 # TS incremental build cache
 *.tsbuildinfo
+.vercel
+.env*

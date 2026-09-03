@@ -37,10 +37,54 @@ class StrategyMode(StrEnum):
     NEUTRAL = "neutral"
 
 
+class InstrumentMode(StrEnum):
+    AUTO = "auto"
+    EQUITY_OPTION = "equity_option"
+    INDEX_OPTION = "index_option"
+
+
+class SwingSignal(StrEnum):
+    BULLISH_BREAKOUT = "bullish_breakout"
+    BULLISH_REVERSAL = "bullish_reversal"
+    BEARISH_BREAKDOWN = "bearish_breakdown"
+    BEARISH_REVERSAL = "bearish_reversal"
+    NEUTRAL = "neutral"
+
+
+class VoteChoice(StrEnum):
+    SUPPORT = "support"
+    OPPOSE = "oppose"
+    ABSTAIN = "abstain"
+
+
+class RotationSignal(StrEnum):
+    RISK_ON = "risk_on"
+    MIXED = "mixed"
+    DEFENSIVE = "defensive"
+
+
+class RotationPhase(StrEnum):
+    LEADING = "leading"
+    IMPROVING = "improving"
+    WEAKENING = "weakening"
+    LAGGING = "lagging"
+
+
+class ScannerPattern(StrEnum):
+    BULLISH_18EMA_CROSS = "bullish_18ema_cross"
+    BEARISH_18EMA_CROSS = "bearish_18ema_cross"
+    BULLISH_TREND_WATCH = "bullish_trend_watch"
+    BEARISH_TREND_WATCH = "bearish_trend_watch"
+    NO_SETUP = "no_setup"
+
+
 class PricePoint(BaseModel):
     timestamp: datetime
     close: float
     volume: int
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
 
 
 class RegimeMetrics(BaseModel):
@@ -72,6 +116,11 @@ class AgentVerdict(BaseModel):
 class StrategyProposal(BaseModel):
     name: StrategyName
     display_name: str
+    signal_symbol: str
+    underlying_symbol: str
+    instrument_type: InstrumentMode
+    option_style: str
+    settlement: str
     thesis: str
     structure: list[str]
     max_loss_dollars: float = Field(ge=0)
@@ -98,13 +147,113 @@ class MarketContext(BaseModel):
     headlines: list[str]
 
 
+class SectorPerformance(BaseModel):
+    rank: int = Field(ge=1, le=11)
+    symbol: str
+    name: str
+    one_month_return: float
+    three_month_return: float
+    relative_strength_1m: float
+    relative_strength_3m: float
+    rotation_score: float
+    phase: RotationPhase
+
+
+class SectorRotationAssessment(BaseModel):
+    benchmark_symbol: str = "SPY"
+    as_of: datetime
+    signal: RotationSignal
+    confidence: float = Field(ge=0, le=1)
+    breadth: float = Field(ge=0, le=1)
+    leaders: list[str]
+    laggards: list[str]
+    sectors: list[SectorPerformance]
+    rationale: str
+
+
+class SwingAssessment(BaseModel):
+    signal: SwingSignal
+    confidence: float = Field(ge=0, le=1)
+    lookback: int = Field(ge=5)
+    swing_low: float
+    swing_high: float
+    range_position: float = Field(ge=0, le=1)
+    rationale: str
+
+
+class CouncilVote(BaseModel):
+    agent: str
+    vote: VoteChoice
+    confidence: float = Field(ge=0, le=1)
+    reason: str
+
+
+class CouncilDecision(BaseModel):
+    votes: list[CouncilVote]
+    support_count: int = Field(ge=0)
+    oppose_count: int = Field(ge=0)
+    abstain_count: int = Field(ge=0)
+    weighted_support: float = Field(ge=0, le=1)
+    approval_threshold: float = Field(ge=0.5, le=0.9)
+    quorum_met: bool
+    approved: bool
+
+
+class ToolEvidence(BaseModel):
+    provider: str
+    capability: str
+    status: str
+    summary: str
+
+
+class ScannerCandidate(BaseModel):
+    rank: int = Field(ge=1)
+    symbol: str
+    name: str
+    as_of: datetime
+    pattern: ScannerPattern
+    direction: Direction
+    option_bias: str
+    conviction: float = Field(ge=0, le=1)
+    actionable: bool
+    current_price: float = Field(gt=0)
+    ema_18: float = Field(gt=0)
+    ema_50: float = Field(gt=0)
+    ema_18_slope_5d: float
+    rsi_14: float = Field(ge=0, le=100)
+    volume_ratio: float = Field(ge=0)
+    relative_strength_20d: float
+    realized_volatility: float = Field(ge=0)
+    average_dollar_volume: float = Field(ge=0)
+    market_aligned: bool
+    liquidity_tier: str
+    evidence: list[str]
+
+
+class ScannerSnapshot(BaseModel):
+    generated_at: datetime
+    source: str
+    interval_minutes: int = Field(ge=5, le=240)
+    universe_size: int = Field(ge=1)
+    scanned_count: int = Field(ge=0)
+    actionable_count: int = Field(ge=0)
+    minimum_conviction: float = Field(ge=0.5, le=0.9)
+    ema_period: int = Field(ge=2)
+    methodology: str
+    candidates: list[ScannerCandidate]
+
+
 class DecisionSnapshot(BaseModel):
     decision_id: str
     generated_at: datetime
     mode: str
     market: MarketContext
     regime: RegimeAssessment
+    swing: SwingAssessment
+    sector_rotation: SectorRotationAssessment
     agents: list[AgentVerdict]
+    council: CouncilDecision
+    tool_evidence: list[ToolEvidence]
     strategy: StrategyProposal
     risk: RiskDecision
     controls: "AnalysisControls"
@@ -113,6 +262,7 @@ class DecisionSnapshot(BaseModel):
 
 class AnalysisControls(BaseModel):
     strategy_mode: StrategyMode = StrategyMode.ADAPTIVE
+    instrument_mode: InstrumentMode = InstrumentMode.AUTO
     max_risk_pct: float = Field(default=0.01, ge=0.001, le=0.02)
     min_confidence: float = Field(default=0.55, ge=0.5, le=0.95)
     target_dte: int = Field(default=30, ge=7, le=60)

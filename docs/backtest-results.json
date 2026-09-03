@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-09-02T10:45:00+00:00",
+  "source": "Alpaca IEX fully adjusted daily bars",
+  "history": {
+    "benchmark": "SPY",
+    "start": "2021-09-07",
+    "end": "2026-09-01",
+    "bars": 1252
+  },
+  "methodology": "70/30 chronological train/holdout, non-overlapping trades, 15 bps proxy friction",
+  "selected_policy": {
+    "swing_lookback": 10,
+    "holding_sessions": 10,
+    "vote_threshold": 0.52,
+    "signal_family": "breakout",
+    "max_volatility_percentile": 0.7
+  },
+  "train": {
+    "trades": 27,
+    "win_rate": 0.6296,
+    "total_return": 0.1158,
+    "average_return": 0.0043,
+    "sharpe": 1.026,
+    "max_drawdown": -0.0707
+  },
+  "holdout": {
+    "trades": 15,
+    "win_rate": 0.6667,
+    "total_return": 0.0528,
+    "average_return": 0.0035,
+    "sharpe": 1.298,
+    "max_drawdown": -0.0308
+  },
+  "cross_asset_confirmation": {
+    "instrument": "DIA directional proxy for DJX defined-risk spreads",
+    "trades": 40,
+    "win_rate": 0.375,
+    "total_return": -0.1529,
+    "average_return": -0.0039,
+    "sharpe": -0.993,
+    "max_drawdown": -0.1794
+  },
+  "production_gate_passed": true,
+  "approved_scope": ["SPY signal → XSP defined-risk spreads"],
+  "rejected_scope": ["DIA signal → DJX spreads failed cross-asset confirmation"],
+  "limitations": [
+    "Measures signal direction, not historical option-spread fills.",
+    "Index-level market data is unavailable, so SPY proxies XSP/SPXW.",
+    "Past paper-proxy performance does not predict future results."
+  ]
+}

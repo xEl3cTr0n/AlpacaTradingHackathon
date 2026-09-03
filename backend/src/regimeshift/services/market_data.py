@@ -10,30 +10,48 @@ from regimeshift.domain.models import MarketContext, PricePoint
 class MarketDataProvider(Protocol):
     def get_context(self, symbol: str) -> MarketContext: ...
 
+    def get_price_history(
+        self, symbols: list[str], days: int = 180
+    ) -> dict[str, list[PricePoint]]: ...
+
 
 class DemoMarketDataProvider:
     """Deterministic market tape for demos, tests, and closed-market development."""
 
-    def get_context(self, symbol: str) -> MarketContext:
+    def _get_prices(self, symbol: str, days: int = 180) -> list[PricePoint]:
         symbol = symbol.upper()
         randomizer = random.Random(f"regimeshift:{symbol}")
         now = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0)
         price = 525.0 if symbol == "SPY" else 460.0
         points: list[PricePoint] = []
-        for index in range(100):
+        point_count = max(100, int(days * 5 / 7))
+        for index in range(point_count):
             drift = 0.0009
             cycle = math.sin(index / 6) * 0.002
             shock = randomizer.gauss(0, 0.006 + (0.002 if index > 85 else 0))
             price *= 1 + drift + cycle + shock
-            timestamp = now - timedelta(days=99 - index)
+            timestamp = now - timedelta(days=point_count - 1 - index)
             points.append(
                 PricePoint(
                     timestamp=timestamp,
+                    open=round(price * (1 - shock / 3), 2),
+                    high=round(price * (1 + abs(shock) / 2 + 0.002), 2),
+                    low=round(price * (1 - abs(shock) / 2 - 0.002), 2),
                     close=round(price, 2),
                     volume=int(61_000_000 + randomizer.random() * 24_000_000),
                 )
             )
 
+        return points
+
+    def get_price_history(
+        self, symbols: list[str], days: int = 180
+    ) -> dict[str, list[PricePoint]]:
+        return {symbol.upper(): self._get_prices(symbol, days) for symbol in symbols}
+
+    def get_context(self, symbol: str) -> MarketContext:
+        symbol = symbol.upper()
+        points = self._get_prices(symbol)
         change = ((points[-1].close / points[-2].close) - 1) * 100
         return MarketContext(
             symbol=symbol,
@@ -60,28 +78,52 @@ class AlpacaMarketDataProvider:
         self.stock_client = StockHistoricalDataClient(settings.alpaca_api_key, secret)
         self.news_client = NewsClient(settings.alpaca_api_key, secret)
 
-    def get_context(self, symbol: str) -> MarketContext:
-        from alpaca.data.requests import NewsRequest, StockBarsRequest
+    def get_price_history(
+        self, symbols: list[str], days: int = 180
+    ) -> dict[str, list[PricePoint]]:
+        from alpaca.data.enums import Adjustment, DataFeed
+        from alpaca.data.requests import StockBarsRequest
         from alpaca.data.timeframe import TimeFrame
 
-        symbol = symbol.upper()
+        normalized = [symbol.upper() for symbol in symbols]
         end = datetime.now(UTC)
         request = StockBarsRequest(
-            symbol_or_symbols=symbol,
+            symbol_or_symbols=normalized,
             timeframe=TimeFrame.Day,
-            start=end - timedelta(days=180),
+            start=end - timedelta(days=days),
             end=end,
+            feed=DataFeed.IEX,
+            adjustment=Adjustment.ALL,
         )
-        bars = self.stock_client.get_stock_bars(request)[symbol]
-        points = [
-            PricePoint(timestamp=bar.timestamp, close=float(bar.close), volume=int(bar.volume))
-            for bar in bars
-        ]
+        bar_set = self.stock_client.get_stock_bars(request)
+        histories: dict[str, list[PricePoint]] = {}
+        for symbol in normalized:
+            bars = bar_set[symbol]
+            histories[symbol] = [
+                PricePoint(
+                    timestamp=bar.timestamp,
+                    open=float(bar.open),
+                    high=float(bar.high),
+                    low=float(bar.low),
+                    close=float(bar.close),
+                    volume=int(bar.volume),
+                )
+                for bar in bars
+            ]
+        return histories
+
+    def get_context(self, symbol: str) -> MarketContext:
+        from alpaca.data.requests import NewsRequest
+
+        symbol = symbol.upper()
+        points = self.get_price_history([symbol])[symbol]
         if len(points) < 55:
             raise ValueError(f"Alpaca returned only {len(points)} daily bars for {symbol}")
 
-        news = self.news_client.get_news(NewsRequest(symbols=symbol, limit=5, sort="desc"))
-        headlines = [article.headline for article in news.news]
+        news_set = self.news_client.get_news(NewsRequest(symbols=symbol, limit=5, sort="desc"))
+        news_data = getattr(news_set, "data", {})
+        news_items = news_data.get("news", []) if isinstance(news_data, dict) else []
+        headlines = [article.headline for article in news_items]
         change = ((points[-1].close / points[-2].close) - 1) * 100
         return MarketContext(
             symbol=symbol,

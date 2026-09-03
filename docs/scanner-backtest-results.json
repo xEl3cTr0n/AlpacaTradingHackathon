@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-09-02T10:56:18.191275+00:00",
+  "source": "Alpaca IEX fully adjusted daily bars",
+  "history": {
+    "calendar_days_requested": 1825,
+    "benchmark_bars": 1252,
+    "start": "2021-09-07T04:00:00+00:00",
+    "end": "2026-09-01T04:00:00+00:00"
+  },
+  "methodology": "Fixed 18 EMA price-cross rule; next-session open entry; one top-ranked portfolio candidate at a time; 70/30 chronological split; 20 bps friction",
+  "parameters": {
+    "ema_period": 18,
+    "trend_ema_period": 50,
+    "minimum_conviction": 0.6,
+    "minimum_average_dollar_volume": 100000000,
+    "holding_sessions": 3
+  },
+  "universe_size": 24,
+  "split_date": "2025-03-05",
+  "train": {
+    "trades": 33,
+    "win_rate": 0.5758,
+    "total_return": 0.3415,
+    "average_return": 0.0101,
+    "sharpe": 1.897,
+    "max_drawdown": -0.1501,
+    "calls": 20,
+    "puts": 13
+  },
+  "holdout": {
+    "trades": 33,
+    "win_rate": 0.6667,
+    "total_return": 0.1167,
+    "average_return": 0.0051,
+    "sharpe": 0.824,
+    "max_drawdown": -0.2696,
+    "calls": 27,
+    "puts": 6
+  },
+  "production_gate_passed": true,
+  "limitations": [
+    "Measures underlying direction, not historical option-spread fills.",
+    "Average dollar volume is a first-stage proxy; live option quotes and open interest must pass before execution.",
+    "A moving average is lagging and can whipsaw in range-bound markets.",
+    "Past paper-proxy performance does not predict future results."
+  ]
+}

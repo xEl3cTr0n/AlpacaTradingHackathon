@@ -4,12 +4,16 @@
 
 ```text
 MarketDataProvider
-  -> RegimeEngine
-  -> Technical + Research evidence
+  -> LargeCapScanner (24 names, 18 EMA cross + confirmation)
+  -> RegimeEngine + SectorRotationEngine + SwingEngine
+  -> Technical + Swing + Research + Rotation evidence
   -> Bull + Bear adversarial theses
+  -> VotingCouncil (5 deterministic proposal-relative votes)
   -> StrategyPolicy
   -> RiskGate (approve / resize / veto)
   -> DecisionSnapshot audit record
+  -> Alpaca CLI contract discovery + quote validation
+  -> dry-run or gated paper-only multi-leg order
 ```
 
 The system intentionally separates calculation, persuasion, and authorization.
@@ -24,16 +28,30 @@ bucket (`low`, `normal`, `high`). A confidence score and component metrics are
 stored with every classification. The next iteration should persist the prior
 state and require confirmation across observations before switching regimes.
 
-## Execution boundary
+## Tooling and execution boundary
 
-The MVP stops at an auditable order preview. `ENABLE_PAPER_ORDERS` is reserved
-for a later broker adapter and defaults to false. Before enabling submission:
+The official Alpaca MCP server exposes read-only account, stock, option, and
+news tools to Claude and Gemini. Trading tools are intentionally excluded so an
+LLM cannot bypass policy. The official Alpaca CLI is pinned separately and is
+the only command path used by the autonomous execution runner.
 
-1. Resolve option contracts from Alpaca's chain using liquidity and Greeks.
-2. Recalculate max loss from executable bid/ask quotes.
-3. Require an explicit operator confirmation and idempotency key.
-4. Submit only to `paper-api.alpaca.markets`.
-5. Reconcile fills and reject stale previews.
+`ENABLE_PAPER_ORDERS` defaults to false. A CLI submission additionally requires
+the runner's explicit `--execute` flag and all of these conditions:
+
+1. The 5-agent council approves the proposed direction.
+2. The separate deterministic Risk gate approves it.
+3. The signal is either a validated SPY swing breakout or a scanner-qualified
+   18 EMA cross with trend, market, relative-strength, and volume confirmation.
+4. The instrument is a one-lot, defined-risk XSP index spread or a spread on a
+   stock in the scanner's fixed large-cap universe.
+5. Alpaca CLI contract discovery, live bid/ask checks, and (for equity options)
+   a 50-contract open-interest floor pass.
+6. Quoted maximum loss is inside the account risk budget.
+7. `ALPACA_LIVE_TRADE=false` is injected by code and cannot be overridden.
+
+The public Vercel app is the observability and analysis surface. The stdio MCP
+server and native CLI execute in the local/worker environment, not in a Vercel
+request handler.
 
 ## Suggested parallel work
 
@@ -41,4 +59,3 @@ for a later broker adapter and defaults to false. Before enabling submission:
 - Agent B: persisted decision/event store and replayable backtests.
 - Agent C: LLM provider adapters with JSON-schema validation.
 - Agent D: dashboard interactions and historical experiment comparison.
-
