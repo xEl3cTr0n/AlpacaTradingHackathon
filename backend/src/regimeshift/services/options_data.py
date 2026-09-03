@@ -72,8 +72,6 @@ class AlpacaOptionsProvider:
             for contract in contracts:
                 snapshot = snapshots.get(contract.symbol)
                 greeks = snapshot.greeks if snapshot else None
-                if not greeks:
-                    continue
                 rows.append(
                     {
                         "symbol": contract.symbol,
@@ -84,9 +82,9 @@ class AlpacaOptionsProvider:
                             if contract.open_interest is not None
                             else None
                         ),
-                        "gamma": greeks.gamma,
-                        "delta": greeks.delta,
-                        "vega": greeks.vega,
+                        "gamma": greeks.gamma if greeks else None,
+                        "delta": greeks.delta if greeks else None,
+                        "vega": greeks.vega if greeks else None,
                         # Alpaca's chain snapshot has no aggregate contract volume.
                         "volume": None,
                     }
