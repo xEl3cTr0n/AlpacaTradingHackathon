@@ -44,6 +44,8 @@ def test_manual_preview_accepts_liquid_defined_risk_call_spread() -> None:
     )
     assert result.valid
     assert result.maximum_loss == 100
+    assert result.stop_loss_dollars == 50
+    assert result.stop_loss_fraction == 0.5
     assert result.maximum_reward == 400
     assert result.paper_only
 
@@ -52,9 +54,9 @@ def test_manual_preview_rejects_over_budget_spread() -> None:
     result = trader().preview(
         ManualTradeRequest(
             long_symbol="AAPL261016C00200000",
-            short_symbol="AAPL261016C00205000",
-            limit_debit=3,
+            short_symbol="AAPL261016C00220000",
+            limit_debit=11,
         )
     )
     assert not result.valid
-    assert any("$200" in reason for reason in result.reasons)
+    assert any("$1,000" in reason for reason in result.reasons)

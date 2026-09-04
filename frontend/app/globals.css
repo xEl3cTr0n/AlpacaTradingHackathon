@@ -215,6 +215,7 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: l
 .advanced-contracts { margin: 12px 0 16px; color: var(--text-muted); font-size: 11px; }
 .advanced-contracts summary { min-height: 36px; display: inline-flex; align-items: center; }
 .advanced-contracts > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.risk-disclaimer { margin: 12px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
 .phase-chip { padding: 4px 6px; border-radius: 5px; color: var(--text-muted); background: var(--muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
 .phase-chip.leading { color: var(--accent); background: rgba(53, 220, 123, .08); }
 .phase-chip.improving { color: var(--cyan); background: rgba(56, 189, 248, .08); }

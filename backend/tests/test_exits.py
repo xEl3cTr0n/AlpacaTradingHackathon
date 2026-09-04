@@ -51,3 +51,18 @@ def test_managed_exit_detects_regime_reversal() -> None:
 
     assert plan is not None
     assert "detected trend reversed against the position" in plan["reasons"]
+
+
+def test_managed_exit_stops_manual_spread_at_half_the_debit() -> None:
+    entry = _entry()
+    entry["client_order_id"] = "regimeshift-manual-abc"
+    positions = {
+        "AAPL261218C00200000": {"qty_available": "1", "unrealized_pl": "-60"},
+        "AAPL261218C00205000": {"qty_available": "1", "unrealized_pl": "-20"},
+    }
+
+    plan = managed_exit_plan(entry, positions, now=datetime(2026, 9, 3, tzinfo=UTC))
+
+    assert plan is not None
+    assert plan["stop_loss_dollars"] == 75
+    assert plan["reasons"] == ["50% maximum-loss stop reached"]

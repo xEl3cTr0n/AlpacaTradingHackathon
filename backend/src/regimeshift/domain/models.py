@@ -154,6 +154,8 @@ class StrategyProposal(BaseModel):
     thesis: str
     structure: list[str]
     max_loss_dollars: float = Field(ge=0)
+    stop_loss_dollars: float = Field(ge=0)
+    stop_loss_fraction: float = Field(ge=0, le=1)
     risk_percent: float = Field(ge=0)
     status: str
     entry_rules: list[str] = Field(default_factory=list)
@@ -368,7 +370,7 @@ class DecisionSnapshot(BaseModel):
 class AnalysisControls(BaseModel):
     strategy_mode: StrategyMode = StrategyMode.ADAPTIVE
     instrument_mode: InstrumentMode = InstrumentMode.AUTO
-    max_risk_pct: float = Field(default=0.01, ge=0.001, le=0.02)
+    max_risk_pct: float = Field(default=0.01, ge=0.001, le=0.01)
     min_confidence: float = Field(default=0.55, ge=0.5, le=0.95)
     target_dte: int = Field(default=30, ge=7, le=60)
     max_loss_cap_dollars: float | None = Field(default=None, ge=50, le=2_000)
@@ -398,6 +400,8 @@ class ManualTradePreview(BaseModel):
     limit_debit: float
     market_debit: float | None = None
     maximum_loss: float
+    stop_loss_dollars: float
+    stop_loss_fraction: float = Field(ge=0, le=1)
     maximum_reward: float
     risk_budget: float
     liquidity_passed: bool

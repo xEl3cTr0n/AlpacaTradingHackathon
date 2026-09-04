@@ -22,6 +22,11 @@ jobs:
       ALPACA_PAPER: "true"
       MARKET_DATA_MODE: alpaca
       ALPACA_CLI_ENABLED: "true"
+      ACCOUNT_EQUITY: "100000"
+      MAX_RISK_PER_TRADE_PCT: "0.01"
+      MAX_POSITION_LOSS_DOLLARS: "1000"
+      DEFENSIVE_RISK_CAP_DOLLARS: "500"
+      STOP_LOSS_FRACTION: "0.50"
       ENABLE_PAPER_ORDERS: ${{ vars.ENABLE_PAPER_ORDERS == 'true' && 'true' || 'false' }}
       ENABLE_EXPLORATION_ORDERS: ${{ vars.ENABLE_EXPLORATION_ORDERS == 'true' && 'true' || 'false' }}
     steps:

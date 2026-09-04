@@ -30,6 +30,8 @@ def test_pipeline_returns_complete_audit_record() -> None:
     assert result.strategy.underlying_symbol == "XSP"
     assert result.strategy.signal_symbol == "SPY"
     assert result.strategy.max_loss_dollars <= result.risk.max_allowed_loss
+    assert result.strategy.max_loss_dollars <= 1_000
+    assert result.strategy.stop_loss_dollars == result.strategy.max_loss_dollars * 0.5
     assert len(result.council.votes) == 6
     assert result.swing.lookback == 20
     assert len(result.sector_rotation.sectors) == 11
@@ -62,4 +64,20 @@ def test_strategy_controls_change_policy_and_risk_budget() -> None:
     assert result.strategy.name == StrategyName.BEAR_PUT_SPREAD
     assert result.risk.max_allowed_loss == 200
     assert result.strategy.max_loss_dollars == 200
+    assert result.strategy.stop_loss_dollars == 100
     assert result.controls.target_dte == 45
+
+
+def test_default_position_budget_is_one_percent_with_half_loss_trigger() -> None:
+    settings = Settings(market_data_mode="demo", account_equity=100_000)
+    controls = AnalysisControls(
+        strategy_mode=StrategyMode.BEARISH,
+        instrument_mode="equity_option",
+        max_risk_pct=0.01,
+    )
+
+    result = DecisionPipeline(settings, DemoMarketDataProvider()).analyze("AAPL", controls)
+
+    assert result.strategy.max_loss_dollars == 1_000
+    assert result.strategy.stop_loss_dollars == 500
+    assert result.risk.max_allowed_loss == 1_000

@@ -10,8 +10,6 @@ from regimeshift.domain.models import (
     ManualTradeResult,
 )
 
-MANUAL_RISK_CAP_DOLLARS = 200.0
-
 
 class ManualPaperTrader:
     """Operator-authenticated, two-leg, defined-risk paper orders only."""
@@ -57,7 +55,7 @@ class ManualPaperTrader:
         maximum_loss = round(request.limit_debit * 100 * request.quantity, 2)
         maximum_reward = round((width - request.limit_debit) * 100 * request.quantity, 2)
         risk_budget = min(
-            MANUAL_RISK_CAP_DOLLARS,
+            self.settings.max_position_loss_dollars,
             self.settings.account_equity * self.settings.max_risk_per_trade_pct,
         )
         if maximum_loss > risk_budget:
@@ -109,10 +107,18 @@ class ManualPaperTrader:
             limit_debit=request.limit_debit,
             market_debit=market_debit,
             maximum_loss=maximum_loss,
+            stop_loss_dollars=round(
+                maximum_loss * self.settings.stop_loss_fraction, 2
+            ),
+            stop_loss_fraction=self.settings.stop_loss_fraction,
             maximum_reward=max(0, maximum_reward),
             risk_budget=round(risk_budget, 2),
             liquidity_passed=liquidity_passed,
-            reasons=reasons or ["Defined-risk structure, quote, and $200 risk gates passed"],
+            reasons=reasons
+            or [
+                "Defined-risk structure and quote gates passed; maximum loss stays "
+                f"within ${risk_budget:,.0f}"
+            ],
         )
 
     def submit(self, request: ManualTradeRequest, operator_token: str) -> ManualTradeResult:

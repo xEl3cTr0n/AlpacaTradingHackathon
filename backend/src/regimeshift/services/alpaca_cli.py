@@ -323,6 +323,7 @@ class AlpacaCliAdapter:
                 entry,
                 positions,
                 current_direction=(direction_by_symbol or {}).get(underlying),
+                stop_loss_fraction=self.settings.stop_loss_fraction,
             )
             if plan is not None:
                 plan["client_order_id"] = exit_client_id

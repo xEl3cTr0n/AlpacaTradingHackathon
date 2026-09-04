@@ -71,7 +71,9 @@ class DecisionPipeline:
         rotation_agent = self._rotation_agent(rotation)
         bull = self._bull_agent(regime, research, rotation)
         bear = self._bear_agent(regime, research, rotation)
-        strategy = self._select_strategy(market.symbol, regime, swing, controls)
+        strategy = self._select_strategy(
+            market.symbol, regime, swing, microstructure, controls
+        )
         council = self.voting_council.evaluate(
             strategy.name,
             regime,
@@ -279,11 +281,17 @@ class DecisionPipeline:
         signal_symbol: str,
         regime: RegimeAssessment,
         swing: SwingAssessment,
+        microstructure: OptionsMicrostructureAssessment,
         controls: AnalysisControls,
     ) -> StrategyProposal:
-        account_risk = self.settings.account_equity * controls.max_risk_pct
+        account_risk = min(
+            self.settings.account_equity * controls.max_risk_pct,
+            self.settings.max_position_loss_dollars,
+        )
         if controls.max_loss_cap_dollars is not None:
             account_risk = min(account_risk, controls.max_loss_cap_dollars)
+        if microstructure.gamma_regime.value == "amplifying":
+            account_risk = min(account_risk, self.settings.defensive_risk_cap_dollars)
         effective_direction = regime.direction
         if controls.strategy_mode == StrategyMode.BULLISH:
             effective_direction = Direction.BULLISH
@@ -330,7 +338,8 @@ class DecisionPipeline:
             structure = []
             thesis = "Directional and volatility edges are insufficiently distinct."
 
-        max_loss = 0.0 if name == StrategyName.NO_TRADE else min(650.0, account_risk)
+        max_loss = 0.0 if name == StrategyName.NO_TRADE else account_risk
+        stop_loss = max_loss * self.settings.stop_loss_fraction
         return StrategyProposal(
             name=name,
             display_name=f"{underlying_symbol} {display}",
@@ -342,6 +351,8 @@ class DecisionPipeline:
             thesis=thesis,
             structure=structure,
             max_loss_dollars=max_loss,
+            stop_loss_dollars=stop_loss,
+            stop_loss_fraction=self.settings.stop_loss_fraction,
             risk_percent=max_loss / self.settings.account_equity,
             status="pending risk review",
             entry_rules=[
@@ -355,7 +366,7 @@ class DecisionPipeline:
             ],
             exit_rules=[
                 "Take profit at 50% of maximum reward",
-                "Exit at 75% of maximum loss",
+                f"Managed exit at {self.settings.stop_loss_fraction:.0%} of maximum loss",
                 "Close or reduce when the detected regime changes",
             ],
         )
@@ -371,7 +382,10 @@ class DecisionPipeline:
         council: CouncilDecision,
         controls: AnalysisControls,
     ) -> RiskDecision:
-        max_allowed = self.settings.account_equity * controls.max_risk_pct
+        max_allowed = min(
+            self.settings.account_equity * controls.max_risk_pct,
+            self.settings.max_position_loss_dollars,
+        )
         if controls.max_loss_cap_dollars is not None:
             max_allowed = min(max_allowed, controls.max_loss_cap_dollars)
         reasons: list[str] = []
@@ -387,10 +401,13 @@ class DecisionPipeline:
                 approved = False
                 reasons.append("Live GEX evidence is unavailable or below 60% data quality")
             elif microstructure.gamma_regime.value == "amplifying":
-                max_allowed = min(max_allowed, 200.0)
+                max_allowed = min(max_allowed, self.settings.defensive_risk_cap_dollars)
                 if strategy.max_loss_dollars > max_allowed:
                     approved = False
-                    reasons.append("Negative-gamma conditions cap maximum loss at $200")
+                    reasons.append(
+                        "Negative-gamma conditions cap maximum loss at "
+                        f"${max_allowed:,.0f}"
+                    )
             elif (
                 microstructure.gamma_concentration is not None
                 and microstructure.gamma_concentration >= 0.6

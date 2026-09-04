@@ -66,7 +66,7 @@ export function OpportunityScanner({
           max_risk_pct: 0.01,
           min_confidence: Math.min(0.9, Math.max(0.55, candidate.conviction)),
           target_dte: 30,
-          max_loss_cap_dollars: candidate.signal_tier === "exploration" ? 200 : null,
+          max_loss_cap_dollars: candidate.signal_tier === "exploration" ? 500 : null,
         });
         onSnapshot(snapshot);
       } catch (analysisError) {
@@ -96,7 +96,7 @@ export function OpportunityScanner({
 
       <section className="scanner-kpis" aria-label="Scanner summary">
         <article><Search size={18} aria-hidden="true" /><div><span>Universe</span><strong>{scanner.scanned_count}/{scanner.universe_size}</strong><small>large-cap names scanned</small></div></article>
-        <article><Crosshair size={18} aria-hidden="true" /><div><span>Council-ready</span><strong>{scanner.actionable_count}</strong><small>production + $200 exploration</small></div></article>
+        <article><Crosshair size={18} aria-hidden="true" /><div><span>Council-ready</span><strong>{scanner.actionable_count}</strong><small>$1,000 production · $500 exploration</small></div></article>
         <article><CheckCircle2 size={18} aria-hidden="true" /><div><span>Primary trigger</span><strong>{scanner.ema_period} EMA</strong><small>confirmed price crossover</small></div></article>
         <article><ShieldAlert size={18} aria-hidden="true" /><div><span>Intraday execution</span><strong>Preview only</strong><small>holdout gate failed; daily tier eligible</small></div></article>
       </section>

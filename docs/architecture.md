@@ -15,7 +15,7 @@ MarketDataProvider
   -> Bull + Bear adversarial theses
   -> VotingCouncil (6 deterministic proposal-relative votes)
   -> StrategyPolicy
-  -> RiskGate (approve / $200 exploration resize / veto)
+  -> RiskGate (approve / $500 defensive resize / veto)
   -> DecisionSnapshot audit record
   -> Alpaca CLI contract discovery + quote validation
   -> dry-run or gated paper-only multi-leg order
@@ -70,7 +70,7 @@ bounded 0–45 DTE, 85–115% moneyness chain. It joins Alpaca snapshot Greeks t
 contract open interest and records data quality and the dealer-position
 assumption. GEX is volatility/structure evidence, not a standalone direction
 signal. Missing data abstains in the council and vetoes production authorization;
-negative gamma imposes a $200 cap, while high GMC requires a confirmed breakout.
+negative gamma imposes a $500 half-size cap, while high GMC requires a confirmed breakout.
 The professor-supplied `modGammaProfile` scoring is ported as a pure calculation
 for call/put walls, directional bias, put trapdoor, key gamma, key delta, and
 hedge wall. Those levels are exposed as evidence and chart overlays only, so
@@ -89,8 +89,11 @@ exploration tiers remain preview-only because their dated holdout gates failed.
 evidence gate.
 
 Exit automation only manages complete two-leg spreads whose entry order has a
-RegimeShift client ID. It submits the inverse legs together, so it never
-intentionally leaves a naked short option.
+RegimeShift signal or manual client ID. The ordinary limit is the lower of 1%
+of modeled equity or $1,000; negative-gamma and exploration positions are capped
+at $500. It submits the inverse legs together at a 50% debit-loss trigger, so it
+never intentionally leaves a naked short option. This is a scheduled trigger,
+not a guaranteed $500 fill; slippage and gaps remain possible.
 
 The public Vercel app is the observability and analysis surface. The stdio MCP
 server and native CLI execute in the local/worker environment, not in a Vercel

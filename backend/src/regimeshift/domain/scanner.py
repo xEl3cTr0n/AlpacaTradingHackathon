@@ -80,7 +80,8 @@ class LargeCapScanner:
     trend_period = 50
     minimum_conviction = 0.60
     exploration_conviction = 0.55
-    exploration_risk_cap = 200.0
+    exploration_risk_cap = 500.0
+    production_risk_cap = 1_000.0
     minimum_average_dollar_volume = 100_000_000
     interval_minutes = 15
 
@@ -145,13 +146,13 @@ class LargeCapScanner:
                 "15-minute 18 EMA crossover and 18/50 trend alignment, confirmed by SPY. "
                 "Daily $100M average dollar volume is the first liquidity gate; contract "
                 "quotes and open interest are checked before execution. Production starts "
-                "at 60% conviction. The 55–60% exploration tier has a hard $200 loss cap."
+                "at 60% conviction. The 55–60% exploration tier uses a $500 half-size cap."
                 if timeframe == "15Min"
                 else "Two-stage liquidity screen: large-cap universe and $100M 20-session "
                 "average dollar volume, followed by contract bid/ask and open-interest "
                 "checks before execution. Production signals require a price/18 EMA cross, "
                 "trend and SPY confirmation, and 60% conviction; 55–60% exploration "
-                "signals have a hard $200 loss cap."
+                "signals use a $500 half-size cap."
             ),
             candidates=ranked,
         )
@@ -313,7 +314,9 @@ class LargeCapScanner:
         )
         actionable = signal_tier != "watch"
         risk_cap_dollars = (
-            self.exploration_risk_cap if signal_tier == "exploration" else 650.0
+            self.exploration_risk_cap
+            if signal_tier == "exploration"
+            else self.production_risk_cap
             if signal_tier == "production"
             else 0.0
         )

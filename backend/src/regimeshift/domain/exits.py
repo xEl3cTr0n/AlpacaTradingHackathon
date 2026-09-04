@@ -25,13 +25,18 @@ def managed_exit_plan(
     positions: dict[str, dict[str, Any]],
     *,
     current_direction: Direction | None = None,
+    stop_loss_fraction: float = 0.50,
     now: datetime | None = None,
 ) -> dict[str, Any] | None:
     """Build an atomic exit only for a complete RegimeShift two-leg debit spread."""
+    if not 0 < stop_loss_fraction <= 1:
+        raise ValueError("Stop-loss fraction must be above zero and no greater than one")
     if (
         entry.get("status") != "filled"
         or entry.get("order_class") != "mleg"
-        or not str(entry.get("client_order_id", "")).startswith("regimeshift-signal-")
+        or not str(entry.get("client_order_id", "")).startswith(
+            ("regimeshift-signal-", "regimeshift-manual-")
+        )
     ):
         return None
     legs = entry.get("legs") or []
@@ -67,8 +72,8 @@ def managed_exit_plan(
     reasons: list[str] = []
     if maximum_reward > 0 and unrealized_pnl >= maximum_reward * 0.50:
         reasons.append("50% profit target reached")
-    if unrealized_pnl <= -maximum_loss * 0.75:
-        reasons.append("75% maximum-loss stop reached")
+    if unrealized_pnl <= -maximum_loss * stop_loss_fraction:
+        reasons.append(f"{stop_loss_fraction:.0%} maximum-loss stop reached")
     if days_to_expiry <= 7:
         reasons.append("expiration is within 7 days")
     if current_direction not in {None, Direction.SIDEWAYS, expected_direction}:
@@ -96,6 +101,8 @@ def managed_exit_plan(
         "quantity": quantity,
         "unrealized_pnl": round(unrealized_pnl, 2),
         "maximum_loss": round(maximum_loss, 2),
+        "stop_loss_dollars": round(maximum_loss * stop_loss_fraction, 2),
+        "stop_loss_fraction": stop_loss_fraction,
         "maximum_reward": round(maximum_reward, 2),
         "days_to_expiry": days_to_expiry,
         "reasons": reasons,

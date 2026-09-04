@@ -187,6 +187,8 @@ export interface DecisionSnapshot {
     thesis: string;
     structure: string[];
     max_loss_dollars: number;
+    stop_loss_dollars: number;
+    stop_loss_fraction: number;
     risk_percent: number;
     status: string;
     entry_rules: string[];
@@ -222,6 +224,8 @@ export interface ManualTradePreview {
   limit_debit: number;
   market_debit?: number | null;
   maximum_loss: number;
+  stop_loss_dollars: number;
+  stop_loss_fraction: number;
   maximum_reward: number;
   risk_budget: number;
   liquidity_passed: boolean;

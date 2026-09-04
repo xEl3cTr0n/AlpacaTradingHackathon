@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     default_symbol: str = "SPY"
     account_equity: float = 100_000.0
     max_risk_per_trade_pct: float = 0.01
+    max_position_loss_dollars: float = Field(default=1_000.0, gt=0, le=10_000)
+    defensive_risk_cap_dollars: float = Field(default=500.0, gt=0, le=10_000)
+    stop_loss_fraction: float = Field(default=0.50, gt=0, le=1)
 
     model_config = SettingsConfigDict(
         env_file=(ROOT_ENV, ".env"),

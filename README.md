@@ -85,9 +85,11 @@ swing breakout, daily 18/50 trend alignment, SPY alignment, at least $100M of
 average daily dollar volume, relative-strength/volume conviction, 3 of 6 council
 votes, live quote/liquidity checks, and deterministic Risk approval. The GEX lane
 adds three structure rules: missing or low-quality chain data fails closed;
-negative gamma caps maximum loss at $200; and gamma concentration at or above
+negative gamma reduces maximum position loss to $500; and gamma concentration at or above
 60% requires a confirmed breakout before chasing direction. `NO_TRADE` remains
-a normal result.
+a normal result. The normal paper budget is the lower of 1% of modeled equity
+or $1,000. A managed exit triggers near a 50% loss, but the Risk Agent reserves
+the full debit because option stops can slip or gap.
 
 The microstructure calculation follows the formulas explicitly published in
 Professor Ninh D. Nguyen's supplied materials: signed GEX is
@@ -191,7 +193,7 @@ stocks using completed 15-minute bars. A candidate is actionable only when
 price crosses the intraday 18 EMA, the prior-session daily 18/50 trend and SPY
 direction agree, 20-session dollar volume exceeds $100M, and composite
 conviction is at least 55%. Signals at 60%+ are production candidates; the
-55–60% exploration tier has a deterministic $200 maximum-loss cap and a
+55–60% exploration tier has a deterministic $500 half-size maximum-loss cap and a
 separate execution lock. The CLI then checks bid/ask width and at least 50 open
 contracts on both equity-option legs.
 
@@ -229,7 +231,9 @@ are forced to the Alpaca paper environment.
 Each cycle evaluates all qualified scanner candidates through the voting
 council instead of stopping after the first rejection. It also inspects spreads
 opened by RegimeShift and prepares an atomic two-leg exit at 50% of maximum
-reward, 75% of maximum loss, seven DTE, or an opposing detected trend.
+reward, 50% of maximum loss, seven DTE, or an opposing detected trend. Because
+the worker checks every 15 minutes, the loss exit is a trigger rather than a
+guaranteed fill price.
 
 Add `--execute` only when you intentionally want eligible signals submitted to
 Alpaca paper trading. The runner skips closed markets and persists a local,
@@ -281,8 +285,10 @@ signal-direction test—not historical option-fill P&L—and is not predictive.
 The dashboard Manual Trade workspace accepts exact OCC symbols for the long and
 short legs. Preview validates same underlying/expiry/type, 7–60 DTE, correct
 debit-spread strike order, live two-sided quotes, at most 20% bid/ask width,
-limit-price sanity, and a hard $200 maximum loss. Submission uses one atomic
-Alpaca `mleg` limit order and always constructs `TradingClient(..., paper=True)`.
+limit-price sanity, and a hard $1,000 maximum loss. The scheduled worker also
+manages RegimeShift manual spreads at a 50% debit-loss trigger. Submission uses
+one atomic Alpaca `mleg` limit order and always constructs
+`TradingClient(..., paper=True)`.
 
 To unlock it locally or on Vercel, create a long random operator token and set:
 
