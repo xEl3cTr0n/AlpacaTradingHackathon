@@ -29,8 +29,9 @@ jobs:
       STOP_LOSS_FRACTION: "0.50"
       MAX_DAILY_LOSS_PCT: "0.02"
       MAX_OPEN_SPREADS: "3"
-      ENABLE_PAPER_ORDERS: ${{ vars.ENABLE_PAPER_ORDERS == 'true' && 'true' || 'false' }}
-      ENABLE_EXPLORATION_ORDERS: ${{ vars.ENABLE_EXPLORATION_ORDERS == 'true' && 'true' || 'false' }}
+      # Explicitly enabled for this hackathon's dedicated paper account.
+      ENABLE_PAPER_ORDERS: "true"
+      ENABLE_EXPLORATION_ORDERS: "true"
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-5-mini
       ENABLE_GPT_MCP_RESEARCH: ${{ vars.ENABLE_GPT_MCP_RESEARCH == 'true' && 'true' || 'false' }}

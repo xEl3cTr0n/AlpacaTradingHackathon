@@ -86,8 +86,9 @@ The scheduled worker evaluates every qualified scanner candidate through the
 council rather than stopping at the first veto. The backtested daily production
 tier can execute when explicitly enabled. Intraday exploration can execute at a
 $500 cap because its dated holdout gate passed; intraday production remains
-locked because its holdout failed. `ENABLE_EXPLORATION_ORDERS` is an independent
-lock and cannot override either evidence gate.
+locked because its holdout failed. The hackathon workflow explicitly opens the
+paper and exploration switches, but neither switch can override an evidence
+gate, council rejection, or Risk veto.
 
 Exit automation only manages complete two-leg spreads whose entry order has a
 RegimeShift signal or manual client ID. The ordinary limit is the lower of 1%

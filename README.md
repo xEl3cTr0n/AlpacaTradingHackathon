@@ -237,13 +237,12 @@ runs the scanner every 5 minutes during the broad US market-hours window. Signal
 still use completed 15-minute bars.
 
 Add `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as GitHub Actions repository secrets.
-The workflow remains preview-only until the repository variable
-`ENABLE_PAPER_ORDERS` is explicitly set to `true` **and** the committed intraday
-holdout gate passes. `ENABLE_EXPLORATION_ORDERS=true` is a separate lock and is
-also ignored until its own holdout gate passes. Orders still require an
-actionable crossover, council approval, the deterministic Risk gate, live
-option liquidity, an open market, and duplicate-signal protection. All orders
-are forced to the Alpaca paper environment.
+This hackathon branch explicitly enables paper and $500 exploration execution in
+the workflow. The committed evidence gate still locks failed tiers. Orders still
+require an actionable crossover, council approval, the deterministic Risk gate,
+live option liquidity, an open market, portfolio circuit breakers, and
+duplicate-signal protection. All orders are forced to the Alpaca paper
+environment.
 
 Each cycle evaluates all qualified scanner candidates through the voting
 council instead of stopping after the first rejection. It also inspects spreads
