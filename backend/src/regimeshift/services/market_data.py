@@ -12,6 +12,10 @@ class MarketDataProvider(Protocol):
 
     def get_context(self, symbol: str) -> MarketContext: ...
 
+    def get_chart_history(
+        self, symbol: str, timeframe: str, limit: int = 300
+    ) -> list[PricePoint]: ...
+
     def get_price_history(
         self, symbols: list[str], days: int = 180
     ) -> dict[str, list[PricePoint]]: ...
@@ -54,6 +58,17 @@ class DemoMarketDataProvider:
         self, symbols: list[str], days: int = 180
     ) -> dict[str, list[PricePoint]]:
         return {symbol.upper(): self._get_prices(symbol, days) for symbol in symbols}
+
+    def get_chart_history(
+        self, symbol: str, timeframe: str, limit: int = 300
+    ) -> list[PricePoint]:
+        if timeframe == "1Day":
+            return self._get_prices(symbol, days=max(180, limit * 2))[-limit:]
+        minutes = {"1Min": 1, "5Min": 5, "15Min": 15}.get(timeframe)
+        if minutes is None:
+            raise ValueError("Timeframe must be 1Min, 5Min, 15Min, or 1Day")
+        days = max(10, math.ceil(limit / 26))
+        return self.get_intraday_history([symbol], days, minutes)[symbol.upper()][-limit:]
 
     def get_intraday_history(
         self, symbols: list[str], days: int = 10, bar_minutes: int = 15
@@ -159,6 +174,50 @@ class AlpacaMarketDataProvider:
                 for bar in bars
             ]
         return histories
+
+    def get_chart_history(
+        self, symbol: str, timeframe: str, limit: int = 300
+    ) -> list[PricePoint]:
+        from alpaca.common.enums import Sort
+        from alpaca.data.enums import Adjustment, DataFeed
+        from alpaca.data.requests import StockBarsRequest
+        from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+
+        timeframe_map = {
+            "1Min": (TimeFrame.Minute, 7),
+            "5Min": (TimeFrame(5, TimeFrameUnit.Minute), 14),
+            "15Min": (TimeFrame(15, TimeFrameUnit.Minute), 30),
+            "1Day": (TimeFrame.Day, max(730, limit * 2)),
+        }
+        if timeframe not in timeframe_map:
+            raise ValueError("Timeframe must be 1Min, 5Min, 15Min, or 1Day")
+        alpaca_timeframe, calendar_days = timeframe_map[timeframe]
+        symbol = symbol.upper()
+        end = datetime.now(UTC)
+        bar_set = self.stock_client.get_stock_bars(
+            StockBarsRequest(
+                symbol_or_symbols=symbol,
+                timeframe=alpaca_timeframe,
+                start=end - timedelta(days=calendar_days),
+                end=end,
+                limit=limit,
+                sort=Sort.DESC,
+                feed=DataFeed.IEX,
+                adjustment=Adjustment.ALL,
+            )
+        )
+        bars = sorted(bar_set[symbol], key=lambda item: item.timestamp)
+        return [
+            PricePoint(
+                timestamp=bar.timestamp,
+                open=float(bar.open),
+                high=float(bar.high),
+                low=float(bar.low),
+                close=float(bar.close),
+                volume=int(bar.volume),
+            )
+            for bar in bars[-limit:]
+        ]
 
     def get_live_tick(self, symbol: str) -> LiveMarketTick:
         from alpaca.data.enums import DataFeed

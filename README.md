@@ -13,7 +13,8 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - Macro, Technical, Options Microstructure, Swing, Research, Rotation, Bull,
   Bear, and Risk outputs.
 - Explicit 6-agent proposal voting followed by a separate deterministic Risk gate.
-- Live Alpaca option-chain GEX, gamma concentration, and call/put wall evidence.
+- Live Alpaca option-chain GEX, gamma concentration, and professor-supplied
+  call/put wall, trapdoor, directional-bias, key-gamma, key-delta, and hedge-wall levels.
 - Three-layer state engine: FRED GDP/CPI macro QUAD, ETF/security bottom-up
   quadrant, and options MOOD/VIBE research proxy.
 - Selectable 1/5/10-second Alpaca IEX tape refresh with pause and manual refresh.
@@ -25,10 +26,12 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - Live Alpaca-only dashboard data with an explicit unavailable state; synthetic
   fallback values are never shown to production users.
 - Alpaca stock-bar and news adapters for paper-account credentials.
-- Responsive decision cockpit with price/regime timeline and audit trail.
+- Responsive chart terminal using TradingView Lightweight Charts over Alpaca
+  OHLCV bars, with 1m/5m/15m/1D candles, volume, EMA 18/50, and strategy levels.
 - Portfolio command center with Alpaca paper P&L, positions, and recent orders.
 - Interactive Strategy Lab for mode, risk budget, confidence, and expiration controls.
-- Operator-token-protected manual paper ticket for one-lot, two-leg debit spreads.
+- Operator-token-protected manual paper ticket with a live 10-contract Alpaca
+  call/put chain, ITM/OTM and expiry controls, and one-lot debit-spread execution.
 - Agent Ops view showing the decision pipeline and API/MCP/CLI connection state.
 - Backtesting workspace with dated train/holdout results from Alpaca historical bars.
 - Portable JSON decision receipts containing the full council vote, deterministic
@@ -94,6 +97,26 @@ contract open interest for this lane. GEX+, GIV, CR(x), GRIP, and REPH are not
 fabricated: GEX+ requires vanna, while GRIP/REPH need the missing formula or
 graphic. Professor sources remain external research inputs; the large historical
 files are not committed.
+
+The Python gamma-profile module also ports the scoring rules supplied in the
+professor's `modGammaProfile` VBA: call/put walls, directional bias, put
+trapdoor, key gamma, key delta, and hedge wall. These values are chart overlays
+and inspectable research evidence only. They do not bypass council voting or
+the deterministic Risk gate.
+
+### Chart terminal and manual option chain
+
+`GET /api/v1/chart` returns Alpaca stock bars for `1Min`, `5Min`, `15Min`, or
+`1Day`. The client renders at most 300 visible candles with the open-source
+TradingView Lightweight Charts package and keeps a recent-OHLC table available
+for keyboard and assistive-technology users. TradingView supplies rendering;
+all price data still comes from Alpaca.
+
+`GET /api/v1/options/chain` returns up to ten nearest-strike Alpaca option
+contracts for the chosen call/put, ITM/OTM, and expiry filters. Selecting two
+rows builds one valid vertical spread; it does not submit ten contracts. A
+preview must pass structure, quote, liquidity, and maximum-loss checks before
+the existing token plus `PAPER` confirmation can submit an Alpaca paper order.
 
 The supplied workbook's cached 2005–2026 series was checked independently with
 `scripts/backtest_professor_gex.py`. On its chronological 30% holdout, GEX had a

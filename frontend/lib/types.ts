@@ -111,6 +111,11 @@ export interface DecisionSnapshot {
     put_vega_intensity?: number | null;
     call_wall?: number | null;
     put_wall?: number | null;
+    call_directional_bias?: number | null;
+    put_directional_bias?: number | null;
+    key_gamma_strike?: number | null;
+    key_delta_strike?: number | null;
+    hedge_wall?: number | null;
     gamma_regime: "stabilizing" | "amplifying" | "mixed" | "unavailable";
     data_quality: number;
     rationale: string;
@@ -238,6 +243,42 @@ export interface LiveMarketTick {
   ask?: number | null;
   spread_bps?: number | null;
   day_change_pct?: number | null;
+  source: string;
+}
+
+export interface ChartSnapshot {
+  symbol: string;
+  timeframe: "1Min" | "5Min" | "15Min" | "1Day";
+  generated_at: string;
+  source: string;
+  bars: PricePoint[];
+}
+
+export interface OptionChainContract {
+  symbol: string;
+  option_type: "call" | "put";
+  expiration: string;
+  strike: number;
+  moneyness: "itm" | "otm";
+  bid?: number | null;
+  ask?: number | null;
+  midpoint?: number | null;
+  spread_percent?: number | null;
+  open_interest?: number | null;
+  implied_volatility?: number | null;
+  delta?: number | null;
+  gamma?: number | null;
+}
+
+export interface OptionChainSnapshot {
+  underlying_symbol: string;
+  underlying_price: number;
+  option_type: "call" | "put";
+  moneyness: "itm" | "otm";
+  expiration: string;
+  expirations: string[];
+  contracts: OptionChainContract[];
+  as_of: string;
   source: string;
 }
 

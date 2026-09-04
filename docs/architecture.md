@@ -4,6 +4,7 @@
 
 ```text
 MarketDataProvider
+  -> Alpaca OHLCV chart history (1m / 5m / 15m / 1D)
   -> FRED real GDP + CPI -> TopDownMacroQuad (6-hour cache)
   -> LargeCapScanner (24 names, completed 15-minute 18 EMA cross + daily context)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
@@ -30,6 +31,9 @@ The 1/5/10-second UI control calls a lightweight Alpaca IEX stock snapshot only.
 An in-process 800 ms deduplication cache limits duplicate upstream requests from
 rapid viewers. Slow macro, bottom-up, news, and option-chain layers are not tied
 to that control; their source timestamps and cadences are shown in the interface.
+The chart terminal separately refreshes completed Alpaca bars every 30–60
+seconds, while incoming tape ticks update only the current candle. TradingView
+Lightweight Charts is a client-side renderer; it is not a market-data source.
 
 ## Regime state
 
@@ -67,6 +71,15 @@ contract open interest and records data quality and the dealer-position
 assumption. GEX is volatility/structure evidence, not a standalone direction
 signal. Missing data abstains in the council and vetoes production authorization;
 negative gamma imposes a $200 cap, while high GMC requires a confirmed breakout.
+The professor-supplied `modGammaProfile` scoring is ported as a pure calculation
+for call/put walls, directional bias, put trapdoor, key gamma, key delta, and
+hedge wall. Those levels are exposed as evidence and chart overlays only, so
+they cannot grant authorization or weaken the deterministic Risk gate.
+
+The manual ticket obtains a bounded Alpaca chain, filters to one expiry and the
+ten nearest requested ITM/OTM calls or puts, then requires a structurally valid
+vertical spread. Submission remains a one-lot atomic MLeg paper order protected
+by preview validation, the operator token, and explicit `PAPER` confirmation.
 
 The scheduled worker evaluates every qualified scanner candidate through the
 council rather than stopping at the first veto. The backtested daily production

@@ -1,6 +1,6 @@
-from collections import defaultdict
 from datetime import UTC, datetime
 
+from regimeshift.domain.gamma_profile import calculate_gamma_profile_levels
 from regimeshift.domain.models import (
     GammaRegime,
     OptionsMicrostructureAssessment,
@@ -51,9 +51,6 @@ def assess_microstructure(
             f"Only {len(usable)} contracts had both Greeks and open interest; 20 required.",
         )
 
-    strike_gex: dict[float, float] = defaultdict(float)
-    call_strike_gex: dict[float, float] = defaultdict(float)
-    put_strike_gex: dict[float, float] = defaultdict(float)
     net_gex = gross_gex = total_gamma_oi = atm_gamma_oi = 0.0
     call_delta_volume = put_delta_volume = total_volume = 0.0
     put_vega_volume = total_vega_volume = 0.0
@@ -70,12 +67,9 @@ def assess_microstructure(
         signed = unsigned if option_type == "call" else -unsigned
         net_gex += signed
         gross_gex += unsigned
-        strike_gex[strike] += signed
         if option_type == "call":
-            call_strike_gex[strike] += unsigned
             call_delta_volume += delta * volume
         else:
-            put_strike_gex[strike] += unsigned
             put_delta_volume += delta * volume
             put_vega_volume += vega * volume
         total_volume += volume
@@ -89,8 +83,9 @@ def assess_microstructure(
         (call_delta_volume - put_delta_volume) / total_volume if total_volume else None
     )
     pvi = put_vega_volume / total_vega_volume if total_vega_volume else None
-    call_wall = max(call_strike_gex, key=call_strike_gex.get) if call_strike_gex else None
-    put_wall = max(put_strike_gex, key=put_strike_gex.get) if put_strike_gex else None
+    levels = calculate_gamma_profile_levels(usable, spot)
+    call_wall = levels.call_wall
+    put_wall = levels.put_wall
     normalized = net_gex / gross_gex if gross_gex else 0.0
     if normalized >= 0.08:
         gamma_regime = GammaRegime.STABILIZING
@@ -120,12 +115,22 @@ def assess_microstructure(
         put_vega_intensity=round(pvi, 4) if pvi is not None else None,
         call_wall=call_wall,
         put_wall=put_wall,
+        call_directional_bias=levels.call_directional_bias,
+        put_directional_bias=levels.put_directional_bias,
+        key_gamma_strike=levels.key_gamma_strike,
+        key_delta_strike=levels.key_delta_strike,
+        hedge_wall=levels.hedge_wall,
         gamma_regime=gamma_regime,
         data_quality=round(data_quality, 3),
         rationale=rationale,
         evidence=[
             f"Net GEX {net_gex:,.0f}; gross GEX {gross_gex:,.0f}",
             f"Call wall {call_wall or 0:g}; put wall {put_wall or 0:g}",
+            (
+                f"Key gamma {levels.key_gamma_strike or 0:g}; "
+                f"key delta {levels.key_delta_strike or 0:g}; "
+                f"hedge wall {levels.hedge_wall or 0:g}"
+            ),
             f"NOPE-options {nope:+.3f}" if nope is not None else "NOPE-options unavailable",
             (
                 f"Put vega intensity {pvi:.0%}"

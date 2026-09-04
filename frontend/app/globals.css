@@ -177,6 +177,44 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: l
 .manual-preview strong { margin-top: 5px; font: 600 12px var(--font-mono), monospace; }
 .manual-preview ul { grid-column: 1 / -1; margin: 0; padding-left: 18px; color: var(--text-muted); font-size: 11px; }
 .manual-auth { padding-top: 15px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 160px auto; gap: 10px; align-items: end; }
+.chain-controls { margin-top: 16px; display: grid; grid-template-columns: 150px minmax(230px, 1fr) 180px 190px 44px; gap: 10px; align-items: end; }
+.chain-controls label, .chain-controls legend, .advanced-contracts label { color: var(--text-muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
+.chain-controls fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.chain-controls input, .chain-controls select, .advanced-contracts input { width: 100%; min-height: 44px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--border-bright); border-radius: 7px; background: var(--surface); color: var(--text); font: 600 11px var(--font-mono), monospace; }
+.chain-symbol-input { display: grid; grid-template-columns: 1fr 44px; margin-top: 6px; }
+.chain-symbol-input input { min-width: 0; margin: 0; border-radius: 7px 0 0 7px; }
+.chain-symbol-input button { min-width: 44px; min-height: 44px; border: 1px solid var(--border-bright); border-left: 0; border-radius: 0 7px 7px 0; background: var(--muted); color: var(--cyan); }
+.segmented-control { min-height: 50px; margin-top: 6px; padding: 3px; border: 1px solid var(--border-bright); border-radius: 7px; background: var(--surface); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.segmented-control button { min-height: 44px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; white-space: nowrap; }
+.segmented-control button.active { background: var(--muted); color: var(--text); }
+.chain-refresh { min-height: 44px; }
+.chain-meta { margin: 14px -20px 0; padding: 9px 20px; border-block: 1px solid var(--border); background: rgba(2, 6, 23, .35); display: flex; flex-wrap: wrap; gap: 9px 22px; color: var(--text-muted); font: 500 9px var(--font-mono), monospace; text-transform: uppercase; }
+.chain-meta span:last-child { margin-left: auto; color: var(--amber); }
+.chain-error { margin: 12px 0 0; color: var(--red); font-size: 12px; }
+.chain-table-wrap { margin-top: 0; }
+.option-chain-table { min-width: 900px; margin: 0; }
+.option-chain-table caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.option-chain-table th { color: var(--text-muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
+.option-chain-table td { padding: 10px 8px; color: var(--text-soft); font: 500 10px var(--font-mono), monospace; }
+.option-chain-table td strong, .option-chain-table td small { display: block; }
+.option-chain-table td small { color: var(--text-muted); font-size: 8px; }
+.option-chain-table tr.selected-contract { background: linear-gradient(90deg, rgba(56, 189, 248, .09), transparent 72%); }
+.leg-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.leg-actions button { min-width: 54px; min-height: 44px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text-muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
+.leg-actions button.active.long { border-color: rgba(53, 220, 123, .5); background: rgba(53, 220, 123, .1); color: var(--accent); }
+.leg-actions button.active.short { border-color: rgba(251, 113, 133, .5); background: rgba(251, 113, 133, .1); color: var(--red); }
+.leg-actions button:disabled { cursor: not-allowed; opacity: .34; }
+.selected-legs { margin: 16px 0; display: grid; grid-template-columns: 1fr 1fr .65fr; gap: 1px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--border); }
+.selected-legs > div { min-width: 0; padding: 13px; background: var(--surface); }
+.selected-legs span, .selected-legs strong, .selected-legs small { display: block; }
+.selected-legs span { color: var(--text-muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
+.selected-legs strong { margin-top: 5px; font: 600 13px var(--font-mono), monospace; }
+.selected-legs small { margin-top: 2px; overflow: hidden; color: var(--text-muted); font: 500 9px var(--font-mono), monospace; text-overflow: ellipsis; }
+.compact-ticket-grid { grid-template-columns: 160px minmax(260px, 1fr) auto; align-items: end; }
+.compact-ticket-grid button { min-height: 44px; }
+.advanced-contracts { margin: 12px 0 16px; color: var(--text-muted); font-size: 11px; }
+.advanced-contracts summary { min-height: 36px; display: inline-flex; align-items: center; }
+.advanced-contracts > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .phase-chip { padding: 4px 6px; border-radius: 5px; color: var(--text-muted); background: var(--muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
 .phase-chip.leading { color: var(--accent); background: rgba(53, 220, 123, .08); }
 .phase-chip.improving { color: var(--cyan); background: rgba(56, 189, 248, .08); }
@@ -385,6 +423,27 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
 .refresh-controls label svg { position: absolute; right: 9px; top: 15px; pointer-events: none; color: var(--text-muted); }
 .icon-action { width: 44px; padding: 0; }
 .tape-meta { margin: 14px -20px 0; padding: 9px 20px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px 22px; color: var(--text-muted); background: rgba(2, 6, 23, .35); font: 500 9px var(--font-mono), monospace; text-transform: uppercase; }
+.market-terminal { margin: 16px -8px 0; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: #070c18; }
+.chart-terminal-toolbar { min-height: 48px; display: grid; grid-template-columns: minmax(200px, 1fr) auto auto; gap: 18px; align-items: center; }
+.chart-terminal-toolbar h3 { margin: 0; font: 650 16px var(--font-mono), monospace; }
+.chart-quote { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-mono), monospace; }
+.chart-quote strong { font-size: 20px; }
+.chart-quote span { font-size: 11px; }
+.chart-stat-strip { min-height: 35px; margin: 10px 0 0; border-block: 1px solid rgba(38, 51, 76, .7); display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; color: var(--text-muted); font: 500 9px var(--font-mono), monospace; text-transform: uppercase; }
+.chart-stat-strip b { color: var(--text-soft); font-weight: 600; }
+.trading-chart-shell { min-height: 430px; position: relative; }
+.trading-chart { width: 100%; height: 430px; }
+.chart-placeholder { min-height: 260px; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--text-muted); font: 500 11px var(--font-mono), monospace; }
+.trading-chart-shell .chart-placeholder { position: absolute; inset: 0; min-height: 430px; z-index: 2; background: #070c18; }
+.chart-terminal-foot { min-height: 32px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 22px; color: var(--text-muted); font: 500 9px var(--font-mono), monospace; text-transform: uppercase; }
+.chart-terminal-foot span:nth-child(2) { margin-left: auto; }
+.chart-terminal-foot a { color: var(--text-muted); }
+.chart-terminal-foot i { width: 15px; height: 2px; margin: 0 4px; display: inline-block; vertical-align: middle; }
+.legend-cyan { background: var(--cyan); }
+.legend-amber { background: var(--amber); }
+.compact-chart-table { margin: 8px 0 0; }
+.compact-chart-table table { min-width: 680px; margin: 0; }
+.compact-chart-table th, .compact-chart-table td { font: 500 9px var(--font-mono), monospace; }
 .layer-stack { margin-top: 16px; display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr; align-items: stretch; }
 .market-layer { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 9px; display: grid; grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: auto auto; gap: 10px 12px; background: linear-gradient(145deg, rgba(14, 20, 37, .9), rgba(8, 13, 27, .96)); }
 .layer-index { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid rgba(56, 189, 248, .25); border-radius: 7px; color: var(--cyan); font: 650 10px var(--font-mono), monospace; }
@@ -520,6 +579,8 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
   .scanner-kpis { grid-template-columns: repeat(2, 1fr); }
   .layer-stack { grid-template-columns: 1fr; gap: 10px; }
   .layer-connector { display: none; }
+  .chain-controls { grid-template-columns: 140px 1fr 170px; }
+  .chain-refresh { grid-column: 3; }
 }
 
 @media (max-width: 900px) {
@@ -538,6 +599,12 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
   .backtest-detail-grid { grid-template-columns: 1fr; }
   .layers-toolbar { grid-template-columns: 1fr auto; }
   .refresh-controls { grid-column: 1 / -1; justify-content: flex-end; }
+  .chart-terminal-toolbar { grid-template-columns: 1fr auto; }
+  .chart-terminal-toolbar .range-tabs { grid-column: 1 / -1; justify-self: start; }
+  .chain-controls { grid-template-columns: 1fr 1fr; }
+  .chain-refresh { grid-column: auto; }
+  .selected-legs { grid-template-columns: 1fr 1fr; }
+  .selected-legs > div:last-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
@@ -560,4 +627,12 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
   .live-tape { justify-self: start; }
   .refresh-controls { justify-content: flex-start; }
   .market-layer dl { grid-template-columns: 1fr; }
+  .chart-terminal-toolbar { grid-template-columns: 1fr; }
+  .chart-terminal-toolbar .range-tabs { grid-column: auto; width: 100%; }
+  .chart-terminal-toolbar .range-tabs button { flex: 1; }
+  .chart-quote { justify-self: start; }
+  .chart-terminal-foot span:nth-child(2) { margin-left: 0; }
+  .chain-controls, .selected-legs, .compact-ticket-grid, .advanced-contracts > div { grid-template-columns: 1fr; }
+  .selected-legs > div:last-child { grid-column: auto; }
+  .chain-meta span:last-child { margin-left: 0; }
 }

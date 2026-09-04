@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -214,6 +214,11 @@ class OptionsMicrostructureAssessment(BaseModel):
     put_vega_intensity: float | None = Field(default=None, ge=0, le=1)
     call_wall: float | None = Field(default=None, gt=0)
     put_wall: float | None = Field(default=None, gt=0)
+    call_directional_bias: float | None = Field(default=None, gt=0)
+    put_directional_bias: float | None = Field(default=None, gt=0)
+    key_gamma_strike: float | None = Field(default=None, gt=0)
+    key_delta_strike: float | None = Field(default=None, gt=0)
+    hedge_wall: float | None = Field(default=None, gt=0)
     gamma_regime: GammaRegime
     data_quality: float = Field(ge=0, le=1)
     rationale: str
@@ -414,6 +419,42 @@ class LiveMarketTick(BaseModel):
     ask: float | None = Field(default=None, gt=0)
     spread_bps: float | None = Field(default=None, ge=0)
     day_change_pct: float | None = None
+    source: str
+
+
+class ChartSnapshot(BaseModel):
+    symbol: str
+    timeframe: str
+    generated_at: datetime
+    source: str
+    bars: list[PricePoint]
+
+
+class OptionChainContract(BaseModel):
+    symbol: str
+    option_type: str
+    expiration: date
+    strike: float = Field(gt=0)
+    moneyness: str
+    bid: float | None = Field(default=None, ge=0)
+    ask: float | None = Field(default=None, ge=0)
+    midpoint: float | None = Field(default=None, ge=0)
+    spread_percent: float | None = Field(default=None, ge=0)
+    open_interest: int | None = Field(default=None, ge=0)
+    implied_volatility: float | None = Field(default=None, ge=0)
+    delta: float | None = None
+    gamma: float | None = Field(default=None, ge=0)
+
+
+class OptionChainSnapshot(BaseModel):
+    underlying_symbol: str
+    underlying_price: float = Field(gt=0)
+    option_type: str
+    moneyness: str
+    expiration: date
+    expirations: list[date]
+    contracts: list[OptionChainContract]
+    as_of: datetime
     source: str
 
 

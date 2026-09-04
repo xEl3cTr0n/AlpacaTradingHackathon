@@ -1,3 +1,4 @@
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -7,11 +8,13 @@ from regimeshift.config import Settings, get_settings
 from regimeshift.domain.models import (
     AnalysisControls,
     AnalyzeRequest,
+    ChartSnapshot,
     DecisionSnapshot,
     LiveMarketTick,
     ManualTradePreview,
     ManualTradeRequest,
     ManualTradeResult,
+    OptionChainSnapshot,
     PlatformSnapshot,
     ScannerSnapshot,
 )
@@ -20,6 +23,7 @@ from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.live_tape import get_live_tick
 from regimeshift.services.manual_trading import ManualPaperTrader
 from regimeshift.services.market_data import build_market_data_provider
+from regimeshift.services.options_data import build_options_provider
 from regimeshift.services.platform import build_platform_provider
 
 app = FastAPI(
@@ -110,6 +114,61 @@ def live_tape(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"Live tape request failed: {error}") from error
+
+
+@app.get("/api/v1/chart", response_model=ChartSnapshot)
+def chart(
+    settings: SettingsDependency,
+    symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
+    timeframe: str = Query(default="5Min", pattern=r"^(1Min|5Min|15Min|1Day)$"),
+    limit: int = Query(default=300, ge=50, le=500),
+) -> ChartSnapshot:
+    try:
+        bars = build_market_data_provider(settings).get_chart_history(
+            symbol.upper(), timeframe, limit
+        )
+        if not bars:
+            raise ValueError(f"No {timeframe} bars were returned for {symbol.upper()}")
+        source = (
+            f"Alpaca IEX {timeframe} bars"
+            if settings.market_data_mode.lower() == "alpaca"
+            else f"deterministic {timeframe} demo bars"
+        )
+        return ChartSnapshot(
+            symbol=symbol.upper(),
+            timeframe=timeframe,
+            generated_at=datetime.now(UTC),
+            source=source,
+            bars=bars,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail=f"Chart data request failed: {error}"
+        ) from error
+
+
+@app.get("/api/v1/options/chain", response_model=OptionChainSnapshot)
+def option_chain(
+    settings: SettingsDependency,
+    symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
+    option_type: str = Query(default="call", pattern=r"^(call|put)$"),
+    moneyness: str = Query(default="otm", pattern=r"^(itm|otm)$"),
+    expiration: date | None = None,
+    limit: int = Query(default=10, ge=1, le=10),
+) -> OptionChainSnapshot:
+    try:
+        spot = get_live_tick(settings, symbol).price
+        return build_options_provider(settings).get_chain(
+            symbol.upper(), spot, option_type, moneyness, expiration, limit
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail=f"Option chain request failed: {error}"
+        ) from error
 
 
 @app.post("/api/v1/manual-trades/preview", response_model=ManualTradePreview)

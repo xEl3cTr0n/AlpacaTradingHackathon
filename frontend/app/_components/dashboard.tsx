@@ -93,7 +93,7 @@ export function Dashboard({
           {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} />}
           {view === "backtests" && <BacktestView />}
           {view === "strategy" && <StrategyLab snapshot={snapshot} onSnapshot={setSnapshot} />}
-          {view === "manual" && <ManualTradeTicket />}
+          {view === "manual" && <ManualTradeTicket defaultSymbol={snapshot.market.symbol} />}
           {view === "ops" && <AgentOps platform={initialPlatform} snapshot={snapshot} />}
         </div>
         <footer className="platform-footer"><span><LockKeyhole size={12} aria-hidden="true" /> Paper environment</span><span><Braces size={12} aria-hidden="true" /> Decision {snapshot.decision_id.slice(0, 12)}</span><span><ChartNoAxesCombined size={12} aria-hidden="true" /> Not investment advice</span><span><CircleDollarSign size={12} aria-hidden="true" /> P&amp;L from {initialPlatform.mode}</span></footer>
