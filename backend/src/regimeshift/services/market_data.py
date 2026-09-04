@@ -4,10 +4,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from regimeshift.config import Settings
-from regimeshift.domain.models import MarketContext, PricePoint
+from regimeshift.domain.models import LiveMarketTick, MarketContext, PricePoint
 
 
 class MarketDataProvider(Protocol):
+    def get_live_tick(self, symbol: str) -> LiveMarketTick: ...
+
     def get_context(self, symbol: str) -> MarketContext: ...
 
     def get_price_history(
@@ -98,6 +100,21 @@ class DemoMarketDataProvider:
             ],
         )
 
+    def get_live_tick(self, symbol: str) -> LiveMarketTick:
+        points = self._get_prices(symbol, days=5)
+        price = points[-1].close
+        previous = points[-2].close
+        return LiveMarketTick(
+            symbol=symbol.upper(),
+            as_of=datetime.now(UTC),
+            price=price,
+            bid=round(price - 0.01, 2),
+            ask=round(price + 0.01, 2),
+            spread_bps=round(0.02 / price * 10_000, 2),
+            day_change_pct=round((price / previous - 1) * 100, 3),
+            source="deterministic demo tape",
+        )
+
 
 class AlpacaMarketDataProvider:
     def __init__(self, settings: Settings):
@@ -142,6 +159,43 @@ class AlpacaMarketDataProvider:
                 for bar in bars
             ]
         return histories
+
+    def get_live_tick(self, symbol: str) -> LiveMarketTick:
+        from alpaca.data.enums import DataFeed
+        from alpaca.data.requests import StockSnapshotRequest
+
+        symbol = symbol.upper()
+        snapshots = self.stock_client.get_stock_snapshot(
+            StockSnapshotRequest(symbol_or_symbols=symbol, feed=DataFeed.IEX)
+        )
+        snapshot = snapshots[symbol]
+        trade = snapshot.latest_trade
+        quote = snapshot.latest_quote
+        if trade is None:
+            raise ValueError(f"Alpaca returned no latest trade for {symbol}")
+        price = float(trade.price)
+        bid = float(quote.bid_price) if quote and quote.bid_price else None
+        ask = float(quote.ask_price) if quote and quote.ask_price else None
+        spread_bps = None
+        if bid and ask and ask >= bid:
+            midpoint = (bid + ask) / 2
+            spread_bps = (ask - bid) / midpoint * 10_000 if midpoint else None
+        previous = snapshot.previous_daily_bar
+        day_change = (
+            (price / float(previous.close) - 1) * 100
+            if previous and previous.close
+            else None
+        )
+        return LiveMarketTick(
+            symbol=symbol,
+            as_of=trade.timestamp,
+            price=round(price, 4),
+            bid=round(bid, 4) if bid else None,
+            ask=round(ask, 4) if ask else None,
+            spread_bps=round(spread_bps, 2) if spread_bps is not None else None,
+            day_change_pct=round(day_change, 3) if day_change is not None else None,
+            source="Alpaca IEX stock snapshot",
+        )
 
     def get_intraday_history(
         self, symbols: list[str], days: int = 10, bar_minutes: int = 15

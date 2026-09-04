@@ -89,7 +89,7 @@ export function Dashboard({
           {navItems.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={view === id} className={view === id ? "active" : ""} onClick={() => setView(id)}><Icon size={17} aria-hidden="true" />{label}</button>)}
         </nav>
         <div className="platform-content" id="platform-content">
-          {view === "portfolio" && <PortfolioView platform={initialPlatform} onOpenStrategy={() => setView("strategy")} />}
+          {view === "portfolio" && <PortfolioView platform={initialPlatform} snapshot={snapshot} onOpenStrategy={() => setView("strategy")} />}
           {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} />}
           {view === "backtests" && <BacktestView />}
           {view === "strategy" && <StrategyLab snapshot={snapshot} onSnapshot={setSnapshot} />}

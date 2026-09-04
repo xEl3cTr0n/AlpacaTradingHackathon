@@ -85,6 +85,29 @@ class GammaRegime(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class MacroQuad(StrEnum):
+    QUAD_I = "quad_i"
+    QUAD_II = "quad_ii"
+    QUAD_III = "quad_iii"
+    QUAD_IV = "quad_iv"
+    UNAVAILABLE = "unavailable"
+
+
+class BottomUpQuad(StrEnum):
+    QUAD_1 = "quad_1"
+    QUAD_2 = "quad_2"
+    QUAD_3 = "quad_3"
+    QUAD_4 = "quad_4"
+
+
+class VibeRegime(StrEnum):
+    VOLATILITY = "volatility"
+    INDIFFERENCE = "indifference"
+    BTFD = "btfd"
+    EUPHORIA = "euphoria"
+    UNAVAILABLE = "unavailable"
+
+
 class PricePoint(BaseModel):
     timestamp: datetime
     close: float
@@ -197,6 +220,52 @@ class OptionsMicrostructureAssessment(BaseModel):
     evidence: list[str]
 
 
+class MacroQuadAssessment(BaseModel):
+    quadrant: MacroQuad
+    label: str
+    real_gdp_yoy: float | None = None
+    cpi_yoy: float | None = None
+    growth_accelerating: bool | None = None
+    inflation_accelerating: bool | None = None
+    data_as_of: datetime | None = None
+    source: str
+    status: str
+    confidence: float = Field(ge=0, le=1)
+    rationale: str
+
+
+class BottomUpQuadAssessment(BaseModel):
+    quadrant: BottomUpQuad
+    label: str
+    trend_positive: bool
+    breadth_positive: bool
+    confidence: float = Field(ge=0, le=1)
+    rationale: str
+
+
+class MoodVibeAssessment(BaseModel):
+    mood: str
+    vibe: VibeRegime
+    status: str
+    confidence: float = Field(ge=0, le=1)
+    input_coverage: float = Field(ge=0, le=1)
+    rationale: str
+    missing_inputs: list[str]
+
+
+class LayeredMarketState(BaseModel):
+    macro: MacroQuadAssessment
+    bottom_up: BottomUpQuadAssessment
+    mood_vibe: MoodVibeAssessment
+    hierarchy: list[str] = Field(
+        default_factory=lambda: [
+            "Top-down GDP/CPI macro quadrant",
+            "Bottom-up security and ETF participation quadrant",
+            "Options microstructure MOOD/VIBE research proxy",
+        ]
+    )
+
+
 class SwingAssessment(BaseModel):
     signal: SwingSignal
     confidence: float = Field(ge=0, le=1)
@@ -281,6 +350,7 @@ class DecisionSnapshot(BaseModel):
     swing: SwingAssessment
     sector_rotation: SectorRotationAssessment
     options_microstructure: OptionsMicrostructureAssessment
+    market_layers: LayeredMarketState
     agents: list[AgentVerdict]
     council: CouncilDecision
     tool_evidence: list[ToolEvidence]
@@ -334,6 +404,17 @@ class ManualTradeResult(BaseModel):
     paper_only: bool = True
     order_id: str
     client_order_id: str
+
+
+class LiveMarketTick(BaseModel):
+    symbol: str
+    as_of: datetime
+    price: float = Field(gt=0)
+    bid: float | None = Field(default=None, gt=0)
+    ask: float | None = Field(default=None, gt=0)
+    spread_bps: float | None = Field(default=None, ge=0)
+    day_change_pct: float | None = None
+    source: str
 
 
 class EquityPoint(BaseModel):

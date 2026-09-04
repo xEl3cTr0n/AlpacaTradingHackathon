@@ -8,6 +8,7 @@ from regimeshift.domain.models import (
     AnalysisControls,
     AnalyzeRequest,
     DecisionSnapshot,
+    LiveMarketTick,
     ManualTradePreview,
     ManualTradeRequest,
     ManualTradeResult,
@@ -16,6 +17,7 @@ from regimeshift.domain.models import (
 )
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.orchestration.pipeline import DecisionPipeline
+from regimeshift.services.live_tape import get_live_tick
 from regimeshift.services.manual_trading import ManualPaperTrader
 from regimeshift.services.market_data import build_market_data_provider
 from regimeshift.services.platform import build_platform_provider
@@ -95,6 +97,19 @@ def platform(settings: SettingsDependency) -> PlatformSnapshot:
         raise HTTPException(
             status_code=502, detail=f"Paper account request failed: {error}"
         ) from error
+
+
+@app.get("/api/v1/live-tape", response_model=LiveMarketTick)
+def live_tape(
+    settings: SettingsDependency,
+    symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
+) -> LiveMarketTick:
+    try:
+        return get_live_tick(settings, symbol)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Live tape request failed: {error}") from error
 
 
 @app.post("/api/v1/manual-trades/preview", response_model=ManualTradePreview)

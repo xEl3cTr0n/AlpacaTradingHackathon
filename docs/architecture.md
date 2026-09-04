@@ -4,9 +4,12 @@
 
 ```text
 MarketDataProvider
+  -> FRED real GDP + CPI -> TopDownMacroQuad (6-hour cache)
   -> LargeCapScanner (24 names, completed 15-minute 18 EMA cross + daily context)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
+  -> BottomUpQuad (security trend + ETF breadth)
   -> Alpaca option chain + contract OI -> GEX / GMC microstructure evidence
+  -> MOOD / VIBE research proxy (coverage and missing inputs recorded)
   -> Technical + Microstructure + Swing + Research + Rotation evidence
   -> Bull + Bear adversarial theses
   -> VotingCouncil (6 deterministic proposal-relative votes)
@@ -22,6 +25,11 @@ The system intentionally separates calculation, persuasion, and authorization.
 Technical indicators and the risk gate are deterministic. Bull and Bear agents
 may later be backed by different LLM providers, but they only emit structured
 evidence. The orchestrator—not an LLM—enforces the final policy.
+
+The 1/5/10-second UI control calls a lightweight Alpaca IEX stock snapshot only.
+An in-process 800 ms deduplication cache limits duplicate upstream requests from
+rapid viewers. Slow macro, bottom-up, news, and option-chain layers are not tied
+to that control; their source timestamps and cadences are shown in the interface.
 
 ## Regime state
 

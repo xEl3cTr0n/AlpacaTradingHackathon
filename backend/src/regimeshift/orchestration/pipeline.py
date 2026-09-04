@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from regimeshift.config import Settings
 from regimeshift.domain.council import VotingCouncil
+from regimeshift.domain.layers import assess_bottom_up, assess_mood_vibe
 from regimeshift.domain.models import (
     AgentVerdict,
     AnalysisControls,
@@ -10,6 +11,8 @@ from regimeshift.domain.models import (
     DecisionSnapshot,
     Direction,
     InstrumentMode,
+    LayeredMarketState,
+    MacroQuadAssessment,
     MarketContext,
     OptionsMicrostructureAssessment,
     RegimeAssessment,
@@ -28,6 +31,7 @@ from regimeshift.domain.models import (
 from regimeshift.domain.regime import RegimeEngine
 from regimeshift.domain.sector_rotation import SECTOR_UNIVERSE, SectorRotationEngine
 from regimeshift.domain.swing import SwingEngine
+from regimeshift.services.macro_data import get_macro_quad
 from regimeshift.services.market_data import MarketDataProvider
 from regimeshift.services.options_data import build_options_provider
 
@@ -56,7 +60,11 @@ class DecisionPipeline:
         microstructure = self.options_provider.get_assessment(
             market.symbol, market.current_price
         )
+        macro = get_macro_quad() if settings_market_is_live(self.settings) else get_demo_macro()
+        bottom_up = assess_bottom_up(regime, rotation)
+        mood_vibe = assess_mood_vibe(microstructure, bottom_up, regime)
         technical = self._technical_agent(regime)
+        macro_agent = self._macro_agent(macro)
         microstructure_agent = self._microstructure_agent(microstructure)
         swing_agent = self._swing_agent(swing)
         research = self._research_agent(market)
@@ -89,7 +97,13 @@ class DecisionPipeline:
             swing=swing,
             sector_rotation=rotation,
             options_microstructure=microstructure,
+            market_layers=LayeredMarketState(
+                macro=macro,
+                bottom_up=bottom_up,
+                mood_vibe=mood_vibe,
+            ),
             agents=[
+                macro_agent,
                 technical,
                 microstructure_agent,
                 swing_agent,
@@ -104,6 +118,16 @@ class DecisionPipeline:
             strategy=strategy,
             risk=risk,
             controls=controls,
+        )
+
+    @staticmethod
+    def _macro_agent(assessment: MacroQuadAssessment) -> AgentVerdict:
+        return AgentVerdict(
+            agent="Macro",
+            stance=Stance.NEUTRAL,
+            confidence=assessment.confidence,
+            summary=f"{assessment.quadrant.value.replace('_', ' ').title()}: {assessment.label}",
+            evidence=[assessment.rationale, "Advisory context only until strategy holdout passes."],
         )
 
     @staticmethod
@@ -438,6 +462,12 @@ class DecisionPipeline:
     def _tool_evidence(self) -> list[ToolEvidence]:
         return [
             ToolEvidence(
+                provider="FRED",
+                capability="real GDP and CPI macro quadrant",
+                status="used" if self.settings.market_data_mode.lower() == "alpaca" else "offline",
+                summary="Slow layer cached for six hours; it never polls at tape speed.",
+            ),
+            ToolEvidence(
                 provider="Alpaca Options API",
                 capability="live Greeks, open interest, and GEX evidence",
                 status="used" if self.settings.alpaca_configured else "offline",
@@ -470,3 +500,13 @@ class DecisionPipeline:
                 ),
             ),
         ]
+
+
+def settings_market_is_live(settings: Settings) -> bool:
+    return settings.market_data_mode.lower() == "alpaca"
+
+
+def get_demo_macro() -> MacroQuadAssessment:
+    from regimeshift.services.macro_data import unavailable_macro
+
+    return unavailable_macro("Macro layer is disabled in deterministic demo mode")

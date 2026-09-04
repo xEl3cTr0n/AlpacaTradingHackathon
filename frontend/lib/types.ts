@@ -116,6 +116,39 @@ export interface DecisionSnapshot {
     rationale: string;
     evidence: string[];
   };
+  market_layers: {
+    macro: {
+      quadrant: "quad_i" | "quad_ii" | "quad_iii" | "quad_iv" | "unavailable";
+      label: string;
+      real_gdp_yoy?: number | null;
+      cpi_yoy?: number | null;
+      growth_accelerating?: boolean | null;
+      inflation_accelerating?: boolean | null;
+      data_as_of?: string | null;
+      source: string;
+      status: string;
+      confidence: number;
+      rationale: string;
+    };
+    bottom_up: {
+      quadrant: "quad_1" | "quad_2" | "quad_3" | "quad_4";
+      label: string;
+      trend_positive: boolean;
+      breadth_positive: boolean;
+      confidence: number;
+      rationale: string;
+    };
+    mood_vibe: {
+      mood: string;
+      vibe: "volatility" | "indifference" | "btfd" | "euphoria" | "unavailable";
+      status: string;
+      confidence: number;
+      input_coverage: number;
+      rationale: string;
+      missing_inputs: string[];
+    };
+    hierarchy: string[];
+  };
   agents: AgentVerdict[];
   council: {
     votes: Array<{
@@ -195,6 +228,17 @@ export interface ManualTradeResult {
   paper_only: true;
   order_id: string;
   client_order_id: string;
+}
+
+export interface LiveMarketTick {
+  symbol: string;
+  as_of: string;
+  price: number;
+  bid?: number | null;
+  ask?: number | null;
+  spread_bps?: number | null;
+  day_change_pct?: number | null;
+  source: string;
 }
 
 export interface EquityPoint {

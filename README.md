@@ -10,9 +10,13 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 ## What works now
 
 - Two-axis market regime classification: direction × volatility.
-- Technical, Options Microstructure, Swing, Research, Rotation, Bull, Bear, and Risk outputs.
+- Macro, Technical, Options Microstructure, Swing, Research, Rotation, Bull,
+  Bear, and Risk outputs.
 - Explicit 6-agent proposal voting followed by a separate deterministic Risk gate.
 - Live Alpaca option-chain GEX, gamma concentration, and call/put wall evidence.
+- Three-layer state engine: FRED GDP/CPI macro QUAD, ETF/security bottom-up
+  quadrant, and options MOOD/VIBE research proxy.
+- Selectable 1/5/10-second Alpaca IEX tape refresh with pause and manual refresh.
 - Defined-risk strategy selection with a first-class `NO_TRADE` decision.
 - XSP index-option debit spreads driven by SPY swing breakouts; DJX is excluded by validation.
 - A 24-name, 15-minute large-cap scanner for liquid equity-option candidates,
@@ -97,6 +101,24 @@ The supplied workbook's cached 2005–2026 series was checked independently with
 days had 1.934× the average realized volatility of positive-GEX days. See
 `docs/professor-gex-validation.json`. This validates a volatility-risk overlay,
 not a directional entry signal or option P&L strategy.
+
+### Three-layer regime hierarchy
+
+1. **Top-down Macro QUAD I–IV:** real GDP YoY acceleration versus the prior
+   quarter and CPI YoY acceleration versus three months earlier, sourced from
+   FRED `GDPC1` and `CPIAUCSL`. It is cached for six hours because macro data is
+   monthly/quarterly, not tick data.
+2. **Bottom-up Quad 1–4:** security trend plus weighted 1M/3M sector-ETF breadth.
+   Quad 1 is broad risk-on, Quad 2 a narrow advance, Quad 3 broad risk-off, and
+   Quad 4 rotation/repair. It updates on a full agent run.
+3. **Options MOOD/VIBE:** an explicitly labeled research proxy that maps GEX,
+   GMC, bottom-up state, and RSI into Volatility, Indifference, BTFD, or
+   Euphoria. Its confidence is capped while contract volume/NOPE, vanna/GEX+,
+   charm/CHR, and REPH are unavailable.
+
+The dashboard refresh selector changes only the lightweight Alpaca price/quote
+tape. Recomputing FRED history, sector history, news, and thousands of option
+contracts every second would create noise and exhaust shared API limits.
 
 ```bash
 python3 scripts/backtest_professor_gex.py /path/to/GEX_NN_Copy.xlsm

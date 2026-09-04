@@ -1,11 +1,12 @@
 import { ArrowUpRight, Bot, CircleDollarSign, CreditCard, Landmark, WalletCards } from "lucide-react";
 import { EquityChart } from "@/app/_components/equity-chart";
-import type { PlatformSnapshot } from "@/lib/types";
+import { MarketLayers } from "@/app/_components/market-layers";
+import type { DecisionSnapshot, PlatformSnapshot } from "@/lib/types";
 
 const money = (value: number) => value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 const percent = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
 
-export function PortfolioView({ platform, onOpenStrategy }: { platform: PlatformSnapshot; onOpenStrategy: () => void }) {
+export function PortfolioView({ platform, snapshot, onOpenStrategy }: { platform: PlatformSnapshot; snapshot: DecisionSnapshot; onOpenStrategy: () => void }) {
   const { account } = platform;
   const deployedCapital = platform.positions.reduce(
     (total, position) => total + Math.abs(position.market_value),
@@ -15,6 +16,7 @@ export function PortfolioView({ platform, onOpenStrategy }: { platform: Platform
   return (
     <div className="view-stack">
       <header className="view-heading"><div><p className="eyebrow">Alpaca paper environment</p><h1>Portfolio command center</h1><p>Track agent performance, exposure, and execution quality in one place.</p></div><button type="button" className="primary-action" onClick={onOpenStrategy}><Bot size={17} aria-hidden="true" /> Configure next run</button></header>
+      <MarketLayers snapshot={snapshot} />
       <section className="portfolio-kpis" aria-label="Paper account metrics">
         <article><span className="kpi-icon"><WalletCards size={18} aria-hidden="true" /></span><div><p>Net liquidation</p><strong>{money(account.equity)}</strong><small>Paper account equity</small></div></article>
         <article><span className="kpi-icon"><ArrowUpRight size={18} aria-hidden="true" /></span><div><p>Today&apos;s P&amp;L</p><strong className={account.day_pnl >= 0 ? "positive" : "negative"}>{money(account.day_pnl)}</strong><small>{percent(account.day_pnl_pct)} today</small></div></article>

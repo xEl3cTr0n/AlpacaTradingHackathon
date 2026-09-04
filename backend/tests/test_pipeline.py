@@ -17,6 +17,7 @@ def test_pipeline_returns_complete_audit_record() -> None:
     assert result.market.symbol == "SPY"
     assert {agent.agent for agent in result.agents} == {
         "Technical",
+        "Macro",
         "Microstructure",
         "Swing",
         "Research",
@@ -36,9 +37,13 @@ def test_pipeline_returns_complete_audit_record() -> None:
     assert {item.provider: item.status for item in result.tool_evidence} == {
         "Alpaca Trading API": "demo",
         "Alpaca Options API": "offline",
+        "FRED": "offline",
         "Alpaca MCP": "configured",
         "Alpaca CLI": "external_runner",
     }
+    assert result.market_layers.macro.status == "unavailable"
+    assert result.market_layers.bottom_up.quadrant.value.startswith("quad_")
+    assert result.market_layers.mood_vibe.status == "insufficient_inputs"
     assert result.mode == "demo"
 
 
