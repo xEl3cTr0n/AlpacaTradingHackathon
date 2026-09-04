@@ -229,6 +229,7 @@ class AlpacaPlatformProvider:
                 history.profit_loss or [],
                 strict=False,
             )
+            if float(value) > 0
         ]
         return PlatformSnapshot(
             mode="alpaca",
