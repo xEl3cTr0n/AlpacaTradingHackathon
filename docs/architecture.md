@@ -44,9 +44,10 @@ state and require confirmation across observations before switching regimes.
 
 ## Tooling and execution boundary
 
-The official Alpaca MCP server exposes read-only account, stock, option, and
-news tools to Claude and Gemini. Trading tools are intentionally excluded so an
-LLM cannot bypass policy. The official Alpaca CLI is pinned separately and is
+The official Alpaca MCP server exposes read-only asset, stock, option, news, and
+corporate-action tools to Claude, Gemini, and the optional GPT agent. Account and
+trading toolsets are intentionally excluded so an LLM cannot mutate broker state
+or bypass policy. The official Alpaca CLI is pinned separately and is
 the only command path used by the autonomous execution runner. A separate
 operator-token-protected API path supports manual paper MLeg orders; it is
 disabled by default and hard-codes the paper client.
@@ -54,7 +55,7 @@ disabled by default and hard-codes the paper client.
 `ENABLE_PAPER_ORDERS` defaults to false. A CLI submission additionally requires
 the runner's explicit `--execute` flag and all of these conditions:
 
-1. The 6-agent council approves the proposed direction.
+1. The six core agents plus scanner evidence (when present) approve the proposed direction.
 2. The separate deterministic Risk gate approves it.
 3. The signal is either a validated SPY swing breakout or a scanner-qualified
    18 EMA cross with trend, market, relative-strength, and volume confirmation.
@@ -83,10 +84,10 @@ by preview validation, the operator token, and explicit `PAPER` confirmation.
 
 The scheduled worker evaluates every qualified scanner candidate through the
 council rather than stopping at the first veto. The backtested daily production
-tier can execute when explicitly enabled. The newer intraday production and
-exploration tiers remain preview-only because their dated holdout gates failed.
-`ENABLE_EXPLORATION_ORDERS` is an independent lock and cannot override that
-evidence gate.
+tier can execute when explicitly enabled. Intraday exploration can execute at a
+$500 cap because its dated holdout gate passed; intraday production remains
+locked because its holdout failed. `ENABLE_EXPLORATION_ORDERS` is an independent
+lock and cannot override either evidence gate.
 
 Exit automation only manages complete two-leg spreads whose entry order has a
 RegimeShift signal or manual client ID. The ordinary limit is the lower of 1%

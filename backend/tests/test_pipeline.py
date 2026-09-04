@@ -1,5 +1,8 @@
+from datetime import UTC, datetime, timedelta
+
 from regimeshift.config import Settings
-from regimeshift.domain.models import AnalysisControls, StrategyMode, StrategyName
+from regimeshift.domain.models import AnalysisControls, PricePoint, StrategyMode, StrategyName
+from regimeshift.domain.scanner import LargeCapScanner
 from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.market_data import DemoMarketDataProvider
 
@@ -81,3 +84,40 @@ def test_default_position_budget_is_one_percent_with_half_loss_trigger() -> None
     assert result.strategy.max_loss_dollars == 1_000
     assert result.strategy.stop_loss_dollars == 500
     assert result.risk.max_allowed_loss == 1_000
+
+
+def test_scanner_signal_is_a_structured_council_vote_and_sets_direction() -> None:
+    start = datetime(2025, 1, 2, tzinfo=UTC)
+
+    def points(closes: list[float], volume: int) -> list[PricePoint]:
+        return [
+            PricePoint(
+                timestamp=start + timedelta(days=index),
+                open=close,
+                high=close * 1.01,
+                low=close * 0.99,
+                close=close,
+                volume=volume * (2 if index == len(closes) - 1 else 1),
+            )
+            for index, close in enumerate(closes)
+        ]
+
+    benchmark = points([400 + index * 0.5 for index in range(80)], 5_000_000)
+    closes = [100 + index * 0.8 for index in range(80)]
+    closes[-2] = 145
+    closes[-1] = 180
+    signal = LargeCapScanner().score(
+        "AAPL", "Apple", points(closes, 2_000_000), benchmark, 79
+    )
+    assert signal is not None and signal.actionable
+
+    result = DecisionPipeline(Settings(market_data_mode="demo"), DemoMarketDataProvider()).analyze(
+        "AAPL",
+        AnalysisControls(min_confidence=signal.conviction),
+        scanner_signal=signal,
+    )
+
+    assert result.strategy.name == StrategyName.BULL_CALL_SPREAD
+    assert result.scanner_signal == signal
+    assert any(vote.agent == "Scanner" for vote in result.council.votes)
+    assert any(agent.agent == "Scanner" for agent in result.agents)

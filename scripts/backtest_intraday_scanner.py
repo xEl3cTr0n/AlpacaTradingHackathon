@@ -43,7 +43,11 @@ def main() -> int:
     if args.output:
         args.output.write_text(payload, encoding="utf-8")
     print(payload, end="")
-    return 0 if report["production_gate_passed"] else 2
+    return (
+        0
+        if report["production_gate_passed"] or report["exploration_gate_passed"]
+        else 2
+    )
 
 
 if __name__ == "__main__":

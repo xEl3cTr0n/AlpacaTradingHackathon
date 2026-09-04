@@ -28,7 +28,7 @@ done < "$environment_file"
 # These are intentionally not configurable here: MCP access is paper-only and
 # excludes mutation toolsets so agents cannot bypass the app's Risk Agent.
 export ALPACA_PAPER_TRADE=true
-export ALPACA_TOOLSETS="account,assets,stock-data,options-data,news,corporate-actions"
+export ALPACA_TOOLSETS="assets,stock-data,options-data,news,corporate-actions"
 
 if command -v uvx >/dev/null 2>&1; then
   exec uvx alpaca-mcp-server

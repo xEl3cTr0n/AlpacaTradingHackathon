@@ -39,6 +39,22 @@ def test_bullish_18_ema_cross_is_actionable_only_with_confirmations() -> None:
     assert candidate.option_bias == "call_debit_spread"
 
 
+def test_opposite_cross_inside_trend_is_watch_only() -> None:
+    benchmark = _points([400 + index * 0.5 for index in range(80)], volume=5_000_000)
+    closes = [100 + index * 0.8 for index in range(80)]
+    closes[-2] = 180
+    closes[-1] = 120
+
+    candidate = LargeCapScanner().score(
+        "AAPL", "Apple", _points(closes, volume=2_000_000), benchmark, 79
+    )
+
+    assert candidate is not None
+    assert candidate.pattern == ScannerPattern.BULLISH_TREND_WATCH
+    assert candidate.actionable is False
+    assert candidate.signal_tier == "watch"
+
+
 def test_scanner_is_ranked_and_bounded() -> None:
     provider = DemoMarketDataProvider()
     histories = provider.get_price_history(["SPY", *LARGE_CAP_UNIVERSE], days=365)

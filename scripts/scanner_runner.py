@@ -2,6 +2,7 @@
 """Scan liquid large caps and preview/submit the strongest gated paper trade."""
 
 import argparse
+import asyncio
 import json
 import sys
 import time
@@ -12,8 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / ".scanner-state.json"
 sys.path.insert(0, str(ROOT / "backend" / "src"))
 
+from gpt_mcp_research import research as gpt_mcp_research  # noqa: E402
+
 from regimeshift.config import Settings  # noqa: E402
-from regimeshift.domain.models import AnalysisControls, InstrumentMode  # noqa: E402
+from regimeshift.domain.models import (  # noqa: E402
+    AgentVerdict,
+    AnalysisControls,
+    InstrumentMode,
+    Stance,
+)
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner  # noqa: E402
 from regimeshift.orchestration.pipeline import DecisionPipeline  # noqa: E402
 from regimeshift.services.alpaca_cli import AlpacaCliAdapter  # noqa: E402
@@ -86,6 +94,25 @@ def run_cycle(
             f"{candidate.symbol}:{candidate.as_of.isoformat()}:{candidate.pattern.value}"
         )
         exploration = candidate.signal_tier == "exploration"
+        research_advice = None
+        if settings.enable_gpt_mcp_research:
+            try:
+                advice = asyncio.run(gpt_mcp_research(candidate.symbol))
+                research_advice = AgentVerdict(
+                    agent="GPT Research",
+                    stance=Stance(advice.stance),
+                    confidence=advice.confidence,
+                    summary=advice.thesis,
+                    evidence=[*advice.evidence, *advice.risks],
+                )
+            except Exception as error:
+                summary.setdefault("advisory_errors", []).append(
+                    {
+                        "symbol": candidate.symbol,
+                        "provider": "OpenAI GPT + Alpaca MCP",
+                        "error": str(error)[:300],
+                    }
+                )
         snapshot = pipeline.analyze(
             candidate.symbol,
             AnalysisControls(
@@ -94,6 +121,8 @@ def run_cycle(
                 target_dte=target_dte,
                 max_loss_cap_dollars=(candidate.risk_cap_dollars if exploration else None),
             ),
+            scanner_signal=candidate,
+            research_advice=research_advice,
         )
         evaluation = {
             "decision_id": snapshot.decision_id,
@@ -119,9 +148,16 @@ def run_cycle(
             continue
         verification = verification or cli.verify()
         candidate_execute = execute and (
-            not exploration
-            or (settings.enable_exploration_orders and timeframe == "intraday")
+            (timeframe == "daily" and not exploration)
+            or (
+                timeframe == "intraday"
+                and exploration
+                and settings.enable_exploration_orders
+            )
         )
+        if execute and not candidate_execute:
+            evaluation["result"] = "tier_gate_closed"
+            continue
         if candidate_execute and not bool(verification["clock"].get("is_open")):
             summary["cli"] = verification
             summary["execution"] = {

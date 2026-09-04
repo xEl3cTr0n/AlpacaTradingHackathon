@@ -104,19 +104,28 @@ class LargeCapScanner:
             points = histories.get(symbol, [])
             if len(points) < 60:
                 continue
-            candidate = self.score(
-                symbol,
-                name,
-                points,
-                benchmark,
-                len(points) - 1,
-                liquidity_points=(liquidity_histories or histories).get(symbol),
-                trend_points=(liquidity_histories or {}).get(symbol),
-                benchmark_trend_points=(liquidity_histories or {}).get(
-                    self.benchmark_symbol
-                ),
-                annualization_periods=annualization_periods,
-            )
+            candidate = None
+            newest_candidate = None
+            detection_bars = 4 if timeframe == "15Min" else 1
+            for index in range(len(points) - 1, max(59, len(points) - detection_bars - 1), -1):
+                scored = self.score(
+                    symbol,
+                    name,
+                    points,
+                    benchmark,
+                    index,
+                    liquidity_points=(liquidity_histories or histories).get(symbol),
+                    trend_points=(liquidity_histories or {}).get(symbol),
+                    benchmark_trend_points=(liquidity_histories or {}).get(
+                        self.benchmark_symbol
+                    ),
+                    annualization_periods=annualization_periods,
+                )
+                newest_candidate = newest_candidate or scored
+                if scored is not None and scored.actionable:
+                    candidate = scored
+                    break
+            candidate = candidate or newest_candidate
             if candidate is not None:
                 candidates.append(candidate)
 
@@ -143,7 +152,8 @@ class LargeCapScanner:
             minimum_conviction=self.minimum_conviction,
             ema_period=self.ema_period,
             methodology=(
-                "15-minute 18 EMA crossover and 18/50 trend alignment, confirmed by SPY. "
+                "15-minute 18 EMA crossover and 18/50 trend alignment, confirmed by SPY; "
+                "the latest four completed bars are checked to tolerate worker delay. "
                 "Daily $100M average dollar volume is the first liquidity gate; contract "
                 "quotes and open interest are checked before execution. Production starts "
                 "at 60% conviction. The 55–60% exploration tier uses a $500 half-size cap."
@@ -281,7 +291,14 @@ class LargeCapScanner:
             for position in range(len(closes) - 20, len(closes))
         ]
         realized_volatility = pstdev(daily_returns) * math.sqrt(annualization_periods)
-        exact_cross = bullish_cross or bearish_cross
+        # A cross is actionable only when it agrees with the higher-timeframe
+        # trend.  The old unqualified OR could mark a bearish cross inside a
+        # bullish trend (or vice versa) as an actionable signal.
+        exact_cross = (
+            direction == Direction.BULLISH and bullish_cross
+        ) or (
+            direction == Direction.BEARISH and bearish_cross
+        )
 
         slope_score = min(1.0, abs(slope) / 0.04)
         relative_strength_score = max(

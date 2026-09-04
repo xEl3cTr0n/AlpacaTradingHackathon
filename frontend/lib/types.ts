@@ -201,6 +201,7 @@ export interface DecisionSnapshot {
     reasons: string[];
   };
   controls: AnalysisControls;
+  scanner_signal?: ScannerCandidate | null;
   disclaimer: string;
 }
 

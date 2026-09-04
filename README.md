@@ -12,7 +12,7 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - Two-axis market regime classification: direction × volatility.
 - Macro, Technical, Options Microstructure, Swing, Research, Rotation, Bull,
   Bear, and Risk outputs.
-- Explicit 6-agent proposal voting followed by a separate deterministic Risk gate.
+- Explicit multi-agent proposal voting followed by a separate deterministic Risk gate.
 - Live Alpaca option-chain GEX, gamma concentration, and professor-supplied
   call/put wall, trapdoor, directional-bias, key-gamma, key-delta, and hedge-wall levels.
 - Three-layer state engine: FRED GDP/CPI macro QUAD, ETF/security bottom-up
@@ -156,13 +156,29 @@ The repository includes project-scoped MCP configuration for Claude Code in
 the official `alpaca-mcp-server` through `scripts/run-alpaca-mcp.sh`. The
 launcher reads only the required credentials from the ignored root `.env` and
 forces paper trading. The committed configuration intentionally excludes
-Alpaca's `trading`, `watchlists`, and `locates` toolsets so an MCP client cannot
-bypass the deterministic Risk Agent.
+Alpaca's `account`, `trading`, `watchlists`, and `locates` toolsets so an MCP
+client cannot mutate account configuration or bypass the deterministic Risk
+Agent. Account telemetry is read separately through the constrained CLI/API.
 
 Install `uv` if neither `uvx --version` nor `backend/.venv/bin/uvx --version`
 works. Restart either client after changing MCP configuration, then verify that
 the `alpaca` server is connected. Keep `ALPACA_MCP_ENABLED=true` in the root
 `.env` so the dashboard reports the configured integration.
+
+GPT can use the same local stdio MCP server through the OpenAI Agents SDK. Its
+tool surface remains read-only, its result is schema-validated, and it receives
+only one advisory council vote; order authorization stays with deterministic
+policy and Risk. Add `OPENAI_API_KEY` to the ignored `.env`, then run:
+
+```bash
+backend/.venv/bin/pip install -e 'backend[agents]'
+backend/.venv/bin/python scripts/gpt_mcp_research.py SPY
+```
+
+Set `ENABLE_GPT_MCP_RESEARCH=true` to attach that advisory to qualified scanner
+reviews. For GitHub Actions, add `OPENAI_API_KEY` as a repository secret and the
+same enable flag as a repository variable. If GPT or MCP fails, the receipt
+records the error and the deterministic pipeline continues without that vote.
 
 ### Alpaca CLI autonomy runner
 
@@ -203,21 +219,22 @@ Run one scan and optional CLI dry-run:
 backend/.venv/bin/python scripts/scanner_runner.py
 ```
 
-Run continuously every 15 minutes:
+Run continuously every 5 minutes (signals still use completed 15-minute bars):
 
 ```bash
-backend/.venv/bin/python scripts/scanner_runner.py --loop --interval-minutes 15
+backend/.venv/bin/python scripts/scanner_runner.py --loop --interval-minutes 5
 ```
 
-Use `--timeframe daily` to run the older production policy backed by the
-five-year daily holdout. The default intraday policy is analysis-only until its
-own evidence gate passes.
+Use `--timeframe daily` to run the production policy backed by the five-year
+daily holdout. Intraday 55–60% exploration signals may execute at a $500 cap;
+the 60%+ intraday production tier stays locked because its holdout failed.
 
 ### Scheduled paper execution
 
 Vercel serves the dashboard and reads Alpaca telemetry, but it does not keep the
 CLI runner alive. The included `RegimeShift paper trading` GitHub Actions workflow
-runs the scanner every 15 minutes during the broad US market-hours window.
+runs the scanner every 5 minutes during the broad US market-hours window. Signals
+still use completed 15-minute bars.
 
 Add `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as GitHub Actions repository secrets.
 The workflow remains preview-only until the repository variable
@@ -232,7 +249,7 @@ Each cycle evaluates all qualified scanner candidates through the voting
 council instead of stopping after the first rejection. It also inspects spreads
 opened by RegimeShift and prepares an atomic two-leg exit at 50% of maximum
 reward, 50% of maximum loss, seven DTE, or an opposing detected trend. Because
-the worker checks every 15 minutes, the loss exit is a trigger rather than a
+the worker checks every 5 minutes, the loss exit is a trigger rather than a
 guaranteed fill price.
 
 Add `--execute` only when you intentionally want eligible signals submitted to

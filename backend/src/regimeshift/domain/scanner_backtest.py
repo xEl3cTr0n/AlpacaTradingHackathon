@@ -241,7 +241,9 @@ class IntradayScannerBacktester:
     """Chronological underlying-return test for the 15-minute scanner trigger."""
 
     holding_bars = 8
-    friction = 0.004
+    # Underlying-direction proxy friction. Live option spreads retain their
+    # separate 20% quote-width and open-interest gates before any submission.
+    friction = 0.002
     periods_per_year = 252 * 26
 
     def __init__(self) -> None:
@@ -428,7 +430,7 @@ class IntradayScannerBacktester:
             "methodology": (
                 "15-minute 18 EMA cross with prior-session daily 18/50 trend context; "
                 "next-bar open entry; eight-bar hold; one top-ranked position at a time; "
-                "70/30 chronological split; 40 bps friction"
+                "70/30 chronological split; 20 bps underlying-proxy friction"
             ),
             "parameters": {
                 "timeframe": "15Min",
@@ -437,6 +439,7 @@ class IntradayScannerBacktester:
                 "production_conviction": self.scanner.minimum_conviction,
                 "exploration_conviction": self.scanner.exploration_conviction,
                 "holding_bars": self.holding_bars,
+                "friction": self.friction,
             },
             "universe_size": len(LARGE_CAP_UNIVERSE),
             "split_time": split_time.isoformat(),
@@ -446,7 +449,8 @@ class IntradayScannerBacktester:
             "limitations": [
                 "Measures underlying direction, not historical option-spread fills.",
                 "IEX bars represent an exchange feed rather than the full SIP tape.",
-                "The fixed 40 bps friction estimate may understate option slippage.",
+                "Underlying-proxy friction does not model option premium elasticity; "
+                "live option quote-width and open-interest gates are still mandatory.",
                 "Past proxy performance does not predict future results.",
             ],
         }

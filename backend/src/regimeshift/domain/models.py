@@ -364,6 +364,7 @@ class DecisionSnapshot(BaseModel):
     strategy: StrategyProposal
     risk: RiskDecision
     controls: "AnalysisControls"
+    scanner_signal: ScannerCandidate | None = None
     disclaimer: str = "Educational paper-trading prototype. Not investment advice."
 
 

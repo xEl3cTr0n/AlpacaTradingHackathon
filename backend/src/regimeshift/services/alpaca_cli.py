@@ -236,6 +236,9 @@ class AlpacaCliAdapter:
             raise ValueError("ENABLE_PAPER_ORDERS must be true for CLI submission")
         if execute and not allowed:
             raise ValueError("Deterministic execution gates rejected the order")
+        capacity = None
+        if execute:
+            capacity = self.verify_execution_capacity(plan["underlying_symbol"])
 
         arguments = [
             "order",
@@ -264,6 +267,68 @@ class AlpacaCliAdapter:
             "allowed": allowed,
             "paper_only": True,
             "order": result,
+            "execution_capacity": capacity,
+        }
+
+    def verify_execution_capacity(self, underlying: str) -> dict[str, Any]:
+        """Fail closed on account loss, exposure, or duplicate-underlying risk."""
+        account = self._run(
+            [
+                "account",
+                "get",
+                "--quiet",
+                "--jq",
+                "{equity: .equity, last_equity: .last_equity, "
+                "trading_blocked: .trading_blocked}",
+            ]
+        )
+        equity = float(account.get("equity") or 0)
+        last_equity = float(account.get("last_equity") or 0)
+        if equity <= 0 or last_equity <= 0:
+            raise ValueError("Paper account equity could not be verified")
+        daily_return = equity / last_equity - 1
+        if bool(account.get("trading_blocked")):
+            raise ValueError("Paper account is trading blocked")
+        if daily_return <= -self.settings.max_daily_loss_pct:
+            raise ValueError(
+                f"Daily loss circuit breaker reached {daily_return:.2%}; no new entries"
+            )
+
+        positions = self._run_list(["position", "list", "--quiet"])
+        open_orders = self._run_list(
+            ["order", "list", "--status", "open", "--nested", "--limit", "500", "--quiet"]
+        )
+        position_roots = {
+            self._option_root(str(item.get("symbol", "")))
+            for item in positions
+            if item.get("asset_class") in {"us_option", "us_index"}
+        }
+        pending_entry_ids = {
+            str(item.get("client_order_id", ""))
+            for item in open_orders
+            if str(item.get("client_order_id", "")).startswith("regimeshift-signal-")
+        }
+        pending_roots = {
+            self._option_root(str((item.get("legs") or [{}])[0].get("symbol", "")))
+            for item in open_orders
+            if item.get("legs")
+            and str(item.get("client_order_id", "")).startswith("regimeshift-signal-")
+        }
+        active_roots = {root for root in position_roots | pending_roots if root}
+        if underlying in active_roots:
+            raise ValueError(f"An open or pending RegimeShift spread already uses {underlying}")
+        active_spreads = max(len(active_roots), len(pending_entry_ids))
+        if active_spreads >= self.settings.max_open_spreads:
+            raise ValueError(
+                f"Maximum of {self.settings.max_open_spreads} concurrent spreads reached"
+            )
+        return {
+            "daily_return": round(daily_return, 6),
+            "daily_loss_limit": self.settings.max_daily_loss_pct,
+            "active_spreads": active_spreads,
+            "max_open_spreads": self.settings.max_open_spreads,
+            "same_underlying_clear": True,
+            "paper_only": True,
         }
 
     @staticmethod
@@ -271,6 +336,10 @@ class AlpacaCliAdapter:
         """Return a stable, Alpaca-safe ID for one symbol/date/pattern signal."""
         digest = hashlib.sha256(signal_key.encode("utf-8")).hexdigest()[:24]
         return f"regimeshift-signal-{digest}"
+
+    @staticmethod
+    def _option_root(symbol: str) -> str:
+        return symbol[:-15].strip() if len(symbol) > 15 else ""
 
     def existing_order(self, client_order_id: str) -> dict[str, str] | None:
         """Check Alpaca itself so duplicate protection survives ephemeral runners."""

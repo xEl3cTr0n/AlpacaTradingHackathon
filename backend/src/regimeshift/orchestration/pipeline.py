@@ -18,6 +18,7 @@ from regimeshift.domain.models import (
     RegimeAssessment,
     RiskDecision,
     RotationSignal,
+    ScannerCandidate,
     SectorRotationAssessment,
     Stance,
     StrategyMode,
@@ -48,8 +49,25 @@ class DecisionPipeline:
         self.voting_council = VotingCouncil()
         self.options_provider = build_options_provider(settings)
 
-    def analyze(self, symbol: str, controls: AnalysisControls | None = None) -> DecisionSnapshot:
+    def analyze(
+        self,
+        symbol: str,
+        controls: AnalysisControls | None = None,
+        scanner_signal: ScannerCandidate | None = None,
+        research_advice: AgentVerdict | None = None,
+    ) -> DecisionSnapshot:
         controls = controls or AnalysisControls(max_risk_pct=self.settings.max_risk_per_trade_pct)
+        if scanner_signal is not None:
+            if scanner_signal.symbol != symbol.upper():
+                raise ValueError("Scanner signal symbol does not match analysis symbol")
+            strategy_mode = (
+                StrategyMode.BULLISH
+                if scanner_signal.direction == Direction.BULLISH
+                else StrategyMode.BEARISH
+                if scanner_signal.direction == Direction.BEARISH
+                else StrategyMode.NEUTRAL
+            )
+            controls = controls.model_copy(update={"strategy_mode": strategy_mode})
         market = self.market_data.get_context(symbol)
         regime = self.regime_engine.assess(market.prices)
         swing = self.swing_engine.assess(market.prices)
@@ -67,10 +85,10 @@ class DecisionPipeline:
         macro_agent = self._macro_agent(macro)
         microstructure_agent = self._microstructure_agent(microstructure)
         swing_agent = self._swing_agent(swing)
-        research = self._research_agent(market)
+        research = research_advice or self._research_agent(market)
         rotation_agent = self._rotation_agent(rotation)
-        bull = self._bull_agent(regime, research, rotation)
-        bear = self._bear_agent(regime, research, rotation)
+        bull = self._bull_agent(regime, research, rotation, scanner_signal)
+        bear = self._bear_agent(regime, research, rotation, scanner_signal)
         strategy = self._select_strategy(
             market.symbol, regime, swing, microstructure, controls
         )
@@ -83,10 +101,19 @@ class DecisionPipeline:
             bull,
             bear,
             microstructure,
+            scanner_signal=scanner_signal,
             threshold=0.52,
         )
         risk = self._risk_gate(
-            regime, swing, microstructure, strategy, bull, bear, council, controls
+            regime,
+            swing,
+            microstructure,
+            strategy,
+            bull,
+            bear,
+            council,
+            controls,
+            scanner_signal,
         )
         strategy.status = "paper candidate" if risk.approved else "vetoed"
 
@@ -111,6 +138,7 @@ class DecisionPipeline:
                 swing_agent,
                 research,
                 rotation_agent,
+                *([self._scanner_agent(scanner_signal)] if scanner_signal else []),
                 bull,
                 bear,
                 self._risk_verdict(risk),
@@ -120,6 +148,20 @@ class DecisionPipeline:
             strategy=strategy,
             risk=risk,
             controls=controls,
+            scanner_signal=scanner_signal,
+        )
+
+    @staticmethod
+    def _scanner_agent(signal: ScannerCandidate) -> AgentVerdict:
+        return AgentVerdict(
+            agent="Scanner",
+            stance=Stance.SUPPORT if signal.actionable else Stance.NEUTRAL,
+            confidence=signal.conviction,
+            summary=(
+                f"{signal.pattern.value.replace('_', ' ').title()} "
+                f"({signal.signal_tier} tier)."
+            ),
+            evidence=signal.evidence,
         )
 
     @staticmethod
@@ -221,14 +263,29 @@ class DecisionPipeline:
         regime: RegimeAssessment,
         research: AgentVerdict,
         rotation: SectorRotationAssessment,
+        scanner_signal: ScannerCandidate | None = None,
     ) -> AgentVerdict:
-        aligned = regime.direction == Direction.BULLISH
+        aligned = regime.direction == Direction.BULLISH or bool(
+            scanner_signal
+            and scanner_signal.actionable
+            and scanner_signal.direction == Direction.BULLISH
+        )
         rotation_adjustment = 0.05 if rotation.signal == RotationSignal.RISK_ON else 0
         if rotation.signal == RotationSignal.DEFENSIVE:
             rotation_adjustment = -0.1
+        scanner_adjustment = (
+            0.14
+            if scanner_signal and scanner_signal.direction == Direction.BULLISH
+            else -0.05
+            if scanner_signal and scanner_signal.direction == Direction.BEARISH
+            else 0
+        )
         confidence = min(
             0.9,
-            regime.confidence + (0.05 if aligned else -0.14) + rotation_adjustment,
+            regime.confidence
+            + (0.05 if aligned else -0.14)
+            + rotation_adjustment
+            + scanner_adjustment,
         )
         return AgentVerdict(
             agent="Bull",
@@ -252,6 +309,7 @@ class DecisionPipeline:
         regime: RegimeAssessment,
         research: AgentVerdict,
         rotation: SectorRotationAssessment,
+        scanner_signal: ScannerCandidate | None = None,
     ) -> AgentVerdict:
         volatility_risk = regime.volatility == Volatility.HIGH
         confidence = 0.72 if volatility_risk else 0.56
@@ -259,6 +317,10 @@ class DecisionPipeline:
             confidence = min(0.9, confidence + 0.1)
         elif rotation.signal == RotationSignal.RISK_ON:
             confidence = max(0.35, confidence - 0.05)
+        if scanner_signal and scanner_signal.direction == Direction.BEARISH:
+            confidence = min(0.9, confidence + 0.14)
+        elif scanner_signal and scanner_signal.direction == Direction.BULLISH:
+            confidence = max(0.2, confidence - 0.05)
         return AgentVerdict(
             agent="Bear",
             stance=Stance.OPPOSE,
@@ -381,6 +443,7 @@ class DecisionPipeline:
         bear: AgentVerdict,
         council: CouncilDecision,
         controls: AnalysisControls,
+        scanner_signal: ScannerCandidate | None = None,
     ) -> RiskDecision:
         max_allowed = min(
             self.settings.account_equity * controls.max_risk_pct,
@@ -418,12 +481,33 @@ class DecisionPipeline:
             ):
                 approved = False
                 reasons.append("High gamma concentration requires a confirmed breakout")
-        if regime.confidence < controls.min_confidence:
+        authorization_confidence = (
+            scanner_signal.conviction if scanner_signal is not None else regime.confidence
+        )
+        if authorization_confidence < controls.min_confidence:
             approved = False
             reasons.append(
-                "Regime confidence is below the "
+                "Signal confidence is below the "
                 f"{controls.min_confidence:.0%} authorization threshold"
             )
+        if scanner_signal is not None:
+            proposal_direction = (
+                Direction.BULLISH
+                if strategy.name == StrategyName.BULL_CALL_SPREAD
+                else Direction.BEARISH
+                if strategy.name == StrategyName.BEAR_PUT_SPREAD
+                else Direction.SIDEWAYS
+            )
+            if (
+                not scanner_signal.actionable
+                or not scanner_signal.market_aligned
+                or scanner_signal.direction != proposal_direction
+            ):
+                approved = False
+                reasons.append("Scanner evidence does not authorize this directional proposal")
+            if regime.direction not in {Direction.SIDEWAYS, proposal_direction}:
+                approved = False
+                reasons.append("Daily regime directly opposes the intraday scanner signal")
         if not council.approved and strategy.name != StrategyName.NO_TRADE:
             approved = False
             reasons.append(
@@ -448,9 +532,18 @@ class DecisionPipeline:
         if index_candidate and regime.metrics.volatility_percentile > 0.7:
             approved = False
             reasons.append("Validated XSP policy excludes the top 30% volatility regime")
-        if bear.confidence > bull.confidence + 0.15:
+        if (
+            strategy.name == StrategyName.BULL_CALL_SPREAD
+            and bear.confidence > bull.confidence + 0.15
+        ):
             approved = False
             reasons.append("Bear case materially outweighs the Bull case")
+        if (
+            strategy.name == StrategyName.BEAR_PUT_SPREAD
+            and bull.confidence > bear.confidence + 0.15
+        ):
+            approved = False
+            reasons.append("Bull case materially outweighs the Bear case")
         if approved:
             reasons.extend(
                 [
@@ -477,7 +570,7 @@ class DecisionPipeline:
         )
 
     def _tool_evidence(self) -> list[ToolEvidence]:
-        return [
+        evidence = [
             ToolEvidence(
                 provider="FRED",
                 capability="real GDP and CPI macro quadrant",
@@ -517,6 +610,16 @@ class DecisionPipeline:
                 ),
             ),
         ]
+        if self.settings.enable_gpt_mcp_research:
+            evidence.append(
+                ToolEvidence(
+                    provider="OpenAI GPT",
+                    capability="structured research over read-only Alpaca MCP tools",
+                    status="advisory",
+                    summary="May influence one council vote; cannot bypass the Risk gate.",
+                )
+            )
+        return evidence
 
 
 def settings_market_is_live(settings: Settings) -> bool:

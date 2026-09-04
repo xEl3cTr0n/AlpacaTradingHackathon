@@ -7,6 +7,7 @@ from regimeshift.domain.models import (
     OptionsMicrostructureAssessment,
     RegimeAssessment,
     RotationSignal,
+    ScannerCandidate,
     SectorRotationAssessment,
     Stance,
     StrategyName,
@@ -46,6 +47,7 @@ class VotingCouncil:
         bull: AgentVerdict,
         bear: AgentVerdict,
         microstructure: OptionsMicrostructureAssessment,
+        scanner_signal: ScannerCandidate | None = None,
         threshold: float = 0.56,
     ) -> CouncilDecision:
         direction = strategy_direction(strategy)
@@ -57,6 +59,8 @@ class VotingCouncil:
             self._advocate_vote(direction, bull, bear),
             self._microstructure_vote(strategy, microstructure),
         ]
+        if scanner_signal is not None:
+            votes.append(self._scanner_vote(direction, scanner_signal))
         support = [vote for vote in votes if vote.vote == VoteChoice.SUPPORT]
         oppose = [vote for vote in votes if vote.vote == VoteChoice.OPPOSE]
         abstain_count = sum(vote.vote == VoteChoice.ABSTAIN for vote in votes)
@@ -82,6 +86,25 @@ class VotingCouncil:
             approval_threshold=threshold,
             quorum_met=quorum_met,
             approved=approved,
+        )
+
+    @staticmethod
+    def _scanner_vote(
+        direction: Direction, signal: ScannerCandidate
+    ) -> CouncilVote:
+        aligned = (
+            signal.actionable
+            and signal.market_aligned
+            and signal.direction == direction
+        )
+        return _vote(
+            "Scanner",
+            VoteChoice.SUPPORT if aligned else VoteChoice.OPPOSE,
+            signal.conviction,
+            (
+                f"{signal.pattern.value} at {signal.conviction:.0%} conviction; "
+                f"market alignment is {signal.market_aligned}."
+            ),
         )
 
     @staticmethod

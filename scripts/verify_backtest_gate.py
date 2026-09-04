@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner  # noqa: E402
+from regimeshift.domain.scanner_backtest import IntradayScannerBacktester  # noqa: E402
 
 
 def main() -> int:
@@ -31,6 +32,7 @@ def main() -> int:
         "timeframe": "15Min",
         "production_conviction": scanner.minimum_conviction,
         "exploration_conviction": scanner.exploration_conviction,
+        "friction": IntradayScannerBacktester.friction,
     }
     actual = report.get("parameters", {})
     problems = [
