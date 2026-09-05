@@ -63,6 +63,22 @@ def _metrics(
     }
 
 
+def _trade_ledger(trades: list[ScannerBacktestTrade], limit: int = 12) -> list[dict[str, object]]:
+    return [
+        {
+            "signal_at": trade.signal_date.isoformat(),
+            "symbol": trade.symbol,
+            "direction": trade.direction.value,
+            "option_bias": (
+                "call_debit_spread" if trade.direction == Direction.BULLISH else "put_debit_spread"
+            ),
+            "conviction": round(trade.conviction, 4),
+            "underlying_proxy_return": round(trade.net_return, 4),
+        }
+        for trade in trades[-limit:]
+    ]
+
+
 class ScannerBacktester:
     """Fixed-rule chronological validation for the large-cap 18 EMA scanner."""
 
@@ -76,15 +92,11 @@ class ScannerBacktester:
         benchmark = histories.get(self.scanner.benchmark_symbol, [])
         if len(benchmark) < 100:
             raise ValueError("Scanner backtest requires at least 100 SPY sessions")
-        benchmark_by_date = {
-            point.timestamp.date(): index for index, point in enumerate(benchmark)
-        }
+        benchmark_by_date = {point.timestamp.date(): index for index, point in enumerate(benchmark)}
         benchmark_closes = [point.close for point in benchmark]
-        benchmark_ema_50 = exponential_moving_average(
-            benchmark_closes, self.scanner.trend_period
-        )
-        candidates_by_date: dict[object, list[tuple[float, str, Direction, int]]] = (
-            defaultdict(list)
+        benchmark_ema_50 = exponential_moving_average(benchmark_closes, self.scanner.trend_period)
+        candidates_by_date: dict[object, list[tuple[float, str, Direction, int]]] = defaultdict(
+            list
         )
 
         for symbol in LARGE_CAP_UNIVERSE:
@@ -100,11 +112,7 @@ class ScannerBacktester:
                 old_date = points[index - 20].timestamp.date()
                 benchmark_index = benchmark_by_date.get(signal_date)
                 old_benchmark_index = benchmark_by_date.get(old_date)
-                if (
-                    benchmark_index is None
-                    or old_benchmark_index is None
-                    or benchmark_index < 55
-                ):
+                if benchmark_index is None or old_benchmark_index is None or benchmark_index < 55:
                     continue
 
                 bullish = (
@@ -132,20 +140,16 @@ class ScannerBacktester:
                 market_aligned = (
                     direction == Direction.BULLISH
                     and benchmark_closes[benchmark_index] > benchmark_ema_50[benchmark_index]
-                    and benchmark_ema_50[benchmark_index]
-                    > benchmark_ema_50[benchmark_index - 5]
+                    and benchmark_ema_50[benchmark_index] > benchmark_ema_50[benchmark_index - 5]
                 ) or (
                     direction == Direction.BEARISH
                     and benchmark_closes[benchmark_index] < benchmark_ema_50[benchmark_index]
-                    and benchmark_ema_50[benchmark_index]
-                    < benchmark_ema_50[benchmark_index - 5]
+                    and benchmark_ema_50[benchmark_index] < benchmark_ema_50[benchmark_index - 5]
                 )
                 if not market_aligned:
                     continue
 
-                average_volume = mean(
-                    point.volume for point in points[index - 20 : index]
-                )
+                average_volume = mean(point.volume for point in points[index - 20 : index])
                 average_dollar_volume = mean(
                     point.close * point.volume for point in points[index - 20 : index]
                 )
@@ -154,16 +158,13 @@ class ScannerBacktester:
                 direction_sign = 1 if direction == Direction.BULLISH else -1
                 volume_ratio = points[index].volume / max(1, average_volume)
                 relative_strength = (closes[index] / closes[index - 20] - 1) - (
-                    benchmark_closes[benchmark_index]
-                    / benchmark_closes[old_benchmark_index]
-                    - 1
+                    benchmark_closes[benchmark_index] / benchmark_closes[old_benchmark_index] - 1
                 )
                 slope = ema_18[index] / ema_18[index - 5] - 1
                 conviction = (
                     0.45
                     + 0.20 * min(1.0, abs(slope) / 0.04)
-                    + 0.15
-                    * max(0.0, min(1.0, relative_strength * direction_sign / 0.08))
+                    + 0.15 * max(0.0, min(1.0, relative_strength * direction_sign / 0.08))
                     + 0.10 * max(0.0, min(1.0, (volume_ratio - 0.8) / 0.8))
                     + 0.10
                     * max(
@@ -172,9 +173,7 @@ class ScannerBacktester:
                     )
                 )
                 if conviction >= self.scanner.minimum_conviction:
-                    candidates_by_date[signal_date].append(
-                        (conviction, symbol, direction, index)
-                    )
+                    candidates_by_date[signal_date].append((conviction, symbol, direction, index))
 
         trades: list[ScannerBacktestTrade] = []
         next_entry_date = None
@@ -217,9 +216,7 @@ class ScannerBacktester:
                 "ema_period": self.scanner.ema_period,
                 "trend_ema_period": self.scanner.trend_period,
                 "minimum_conviction": self.scanner.minimum_conviction,
-                "minimum_average_dollar_volume": (
-                    self.scanner.minimum_average_dollar_volume
-                ),
+                "minimum_average_dollar_volume": (self.scanner.minimum_average_dollar_volume),
                 "holding_sessions": self.holding_sessions,
             },
             "universe_size": len(LARGE_CAP_UNIVERSE),
@@ -257,12 +254,10 @@ class IntradayScannerBacktester:
         benchmark = histories.get(self.scanner.benchmark_symbol, [])
         if len(benchmark) < 200:
             raise ValueError("Intraday backtest requires at least 200 SPY bars")
-        candidates_by_time: dict[
-            object, list[tuple[float, str, Direction, int, str]]
-        ] = defaultdict(list)
-        benchmark_index_by_time = {
-            point.timestamp: index for index, point in enumerate(benchmark)
-        }
+        candidates_by_time: dict[object, list[tuple[float, str, Direction, int, str]]] = (
+            defaultdict(list)
+        )
+        benchmark_index_by_time = {point.timestamp: index for index, point in enumerate(benchmark)}
         benchmark_closes = [point.close for point in benchmark]
         for symbol in LARGE_CAP_UNIVERSE:
             points = histories.get(symbol, [])
@@ -277,10 +272,8 @@ class IntradayScannerBacktester:
             daily_50 = exponential_moving_average(daily_closes, self.scanner.trend_period)
             daily_state_by_date = {
                 daily[index].timestamp.date(): (
-                    daily_18[index] > daily_50[index]
-                    and daily_18[index] > daily_18[index - 5],
-                    daily_18[index] < daily_50[index]
-                    and daily_18[index] < daily_18[index - 5],
+                    daily_18[index] > daily_50[index] and daily_18[index] > daily_18[index - 5],
+                    daily_18[index] < daily_50[index] and daily_18[index] < daily_18[index - 5],
                 )
                 for index in range(55, len(daily))
             }
@@ -293,9 +286,7 @@ class IntradayScannerBacktester:
             for index in range(60, len(points) - self.holding_bars):
                 signal_time = points[index].timestamp
                 benchmark_index = benchmark_index_by_time.get(signal_time)
-                old_benchmark_index = benchmark_index_by_time.get(
-                    points[index - 20].timestamp
-                )
+                old_benchmark_index = benchmark_index_by_time.get(points[index - 20].timestamp)
                 if benchmark_index is None or old_benchmark_index is None:
                     continue
                 prior_dates = [date for date in daily_state_by_date if date < signal_time.date()]
@@ -319,29 +310,22 @@ class IntradayScannerBacktester:
                 # vote. It is not a scanner-level veto for symbol-specific
                 # momentum.
                 eligible_adv = [
-                    value
-                    for date, value in adv_by_date.items()
-                    if date < signal_time.date()
+                    value for date, value in adv_by_date.items() if date < signal_time.date()
                 ]
                 average_dollar_volume = eligible_adv[-1] if eligible_adv else 0
                 if average_dollar_volume < self.scanner.minimum_average_dollar_volume:
                     continue
                 direction_sign = 1 if direction == Direction.BULLISH else -1
-                average_volume = mean(
-                    point.volume for point in points[index - 20 : index]
-                )
+                average_volume = mean(point.volume for point in points[index - 20 : index])
                 volume_ratio = points[index].volume / max(1, average_volume)
                 relative_strength = (closes[index] / closes[index - 20] - 1) - (
-                    benchmark_closes[benchmark_index]
-                    / benchmark_closes[old_benchmark_index]
-                    - 1
+                    benchmark_closes[benchmark_index] / benchmark_closes[old_benchmark_index] - 1
                 )
                 slope = ema_18[index] / ema_18[index - 5] - 1
                 conviction = (
                     0.45
                     + 0.20 * min(1.0, abs(slope) / 0.04)
-                    + 0.15
-                    * max(0.0, min(1.0, relative_strength * direction_sign / 0.08))
+                    + 0.15 * max(0.0, min(1.0, relative_strength * direction_sign / 0.08))
                     + 0.10 * max(0.0, min(1.0, (volume_ratio - 0.8) / 0.8))
                     + 0.10
                     * max(
@@ -352,13 +336,9 @@ class IntradayScannerBacktester:
                 if conviction < self.scanner.exploration_conviction:
                     continue
                 tier = (
-                    "production"
-                    if conviction >= self.scanner.minimum_conviction
-                    else "exploration"
+                    "production" if conviction >= self.scanner.minimum_conviction else "exploration"
                 )
-                candidates_by_time[signal_time].append(
-                    (conviction, symbol, direction, index, tier)
-                )
+                candidates_by_time[signal_time].append((conviction, symbol, direction, index, tier))
 
         trades_by_tier: dict[str, list[ScannerBacktestTrade]] = {
             "production": [],
@@ -368,9 +348,7 @@ class IntradayScannerBacktester:
         for signal_time in sorted(candidates_by_time):
             if next_entry_time is not None and signal_time < next_entry_time:
                 continue
-            conviction, symbol, direction, index, tier = max(
-                candidates_by_time[signal_time]
-            )
+            conviction, symbol, direction, index, tier = max(candidates_by_time[signal_time])
             points = histories[symbol]
             entry_price = points[index + 1].open or points[index + 1].close
             exit_price = points[index + self.holding_bars].close
@@ -392,12 +370,11 @@ class IntradayScannerBacktester:
         for tier, trades in trades_by_tier.items():
             train = [trade for trade in trades if trade.signal_date < split_time]
             holdout = [trade for trade in trades if trade.signal_date >= split_time]
-            holdout_metrics = _metrics(
-                holdout, self.holding_bars, self.periods_per_year
-            )
+            holdout_metrics = _metrics(holdout, self.holding_bars, self.periods_per_year)
             tiers[tier] = {
                 "train": _metrics(train, self.holding_bars, self.periods_per_year),
                 "holdout": holdout_metrics,
+                "recent_holdout_trades": _trade_ledger(holdout),
                 "gate_passed": (
                     int(holdout_metrics["trades"]) >= 10
                     and float(holdout_metrics["average_return"]) > 0

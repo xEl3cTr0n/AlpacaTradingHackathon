@@ -33,6 +33,56 @@
         "calls": 3,
         "puts": 3
       },
+      "recent_holdout_trades": [
+        {
+          "signal_at": "2026-07-14T13:30:00+00:00",
+          "symbol": "BAC",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.6872,
+          "underlying_proxy_return": 0.0008
+        },
+        {
+          "signal_at": "2026-07-30T19:45:00+00:00",
+          "symbol": "AMZN",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.605,
+          "underlying_proxy_return": -0.0855
+        },
+        {
+          "signal_at": "2026-08-12T13:30:00+00:00",
+          "symbol": "TSLA",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.6337,
+          "underlying_proxy_return": 0.0124
+        },
+        {
+          "signal_at": "2026-08-20T16:30:00+00:00",
+          "symbol": "MSFT",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.6056,
+          "underlying_proxy_return": -0.0064
+        },
+        {
+          "signal_at": "2026-08-26T19:30:00+00:00",
+          "symbol": "AMD",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.6043,
+          "underlying_proxy_return": 0.004
+        },
+        {
+          "signal_at": "2026-09-02T17:15:00+00:00",
+          "symbol": "NFLX",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.6077,
+          "underlying_proxy_return": 0.0023
+        }
+      ],
       "gate_passed": false
     },
     "exploration": {
@@ -56,6 +106,104 @@
         "calls": 24,
         "puts": 20
       },
+      "recent_holdout_trades": [
+        {
+          "signal_at": "2026-08-20T19:45:00+00:00",
+          "symbol": "GOOGL",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5747,
+          "underlying_proxy_return": -0.0064
+        },
+        {
+          "signal_at": "2026-08-21T19:45:00+00:00",
+          "symbol": "META",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5613,
+          "underlying_proxy_return": -0.0076
+        },
+        {
+          "signal_at": "2026-08-24T19:45:00+00:00",
+          "symbol": "GOOGL",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5773,
+          "underlying_proxy_return": 0.0035
+        },
+        {
+          "signal_at": "2026-08-25T19:45:00+00:00",
+          "symbol": "WMT",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5564,
+          "underlying_proxy_return": 0.0082
+        },
+        {
+          "signal_at": "2026-08-28T13:30:00+00:00",
+          "symbol": "AMD",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5997,
+          "underlying_proxy_return": 0.0017
+        },
+        {
+          "signal_at": "2026-08-28T19:45:00+00:00",
+          "symbol": "LLY",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.5902,
+          "underlying_proxy_return": -0.0169
+        },
+        {
+          "signal_at": "2026-08-31T19:15:00+00:00",
+          "symbol": "NVDA",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.5508,
+          "underlying_proxy_return": -0.0102
+        },
+        {
+          "signal_at": "2026-09-01T18:45:00+00:00",
+          "symbol": "NFLX",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.5594,
+          "underlying_proxy_return": 0.0153
+        },
+        {
+          "signal_at": "2026-09-02T14:45:00+00:00",
+          "symbol": "AVGO",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5698,
+          "underlying_proxy_return": -0.0042
+        },
+        {
+          "signal_at": "2026-09-02T19:15:00+00:00",
+          "symbol": "AVGO",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5551,
+          "underlying_proxy_return": 0.0571
+        },
+        {
+          "signal_at": "2026-09-03T13:30:00+00:00",
+          "symbol": "AAPL",
+          "direction": "bullish",
+          "option_bias": "call_debit_spread",
+          "conviction": 0.5897,
+          "underlying_proxy_return": 0.0081
+        },
+        {
+          "signal_at": "2026-09-03T19:00:00+00:00",
+          "symbol": "AMD",
+          "direction": "bearish",
+          "option_bias": "put_debit_spread",
+          "conviction": 0.5518,
+          "underlying_proxy_return": -0.0285
+        }
+      ],
       "gate_passed": true
     }
   },
@@ -67,7 +215,7 @@
     "Underlying-proxy friction does not model option premium elasticity; live option quote-width and open-interest gates are still mandatory.",
     "Past proxy performance does not predict future results."
   ],
-  "generated_at": "2026-09-05T11:12:12.307754+00:00",
+  "generated_at": "2026-09-05T11:29:33.473594+00:00",
   "source": "Alpaca IEX fully adjusted 15-minute bars",
   "history": {
     "calendar_days_requested": 180,

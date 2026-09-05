@@ -7,6 +7,15 @@ export interface BacktestMetrics {
   maxDrawdown: number;
 }
 
+export interface BacktestTrade {
+  signalAt: string;
+  symbol: string;
+  direction: "bullish" | "bearish";
+  optionBias: "call_debit_spread" | "put_debit_spread";
+  conviction: number;
+  underlyingProxyReturn: number;
+}
+
 export interface BacktestReport {
   id: string;
   name: string;
@@ -22,6 +31,7 @@ export interface BacktestReport {
   holdout: BacktestMetrics;
   parameters: Array<[string, string]>;
   limitations: string[];
+  trades?: BacktestTrade[];
 }
 
 export const backtestReports: BacktestReport[] = [
@@ -61,7 +71,7 @@ export const backtestReports: BacktestReport[] = [
     id: "intraday-scanner",
     name: "Intraday 18 EMA scanner",
     instrument: "15-minute trigger → defined-risk large-cap option spread",
-    generatedAt: "2026-09-05T11:12:12.307754+00:00",
+    generatedAt: "2026-09-05T11:29:33.473594+00:00",
     source: "Alpaca IEX fully adjusted 15-minute bars",
     period: "Mar 9, 2026 – Sep 4, 2026",
     bars: 3867,
@@ -72,5 +82,19 @@ export const backtestReports: BacktestReport[] = [
     holdout: { trades: 44, winRate: 0.4773, totalReturn: 0.0849, averageReturn: 0.0021, sharpe: 2.653, maxDrawdown: -0.1397 },
     parameters: [["Signal EMA", "18 intraday bars"], ["Daily trend", "18 / 50 EMA"], ["Tier shown", "55–60% exploration"], ["Risk cap", "$500"]],
     limitations: ["The 60%+ production tier remains locked after a negative holdout.", "Measures underlying direction, not historical option-spread fills.", "Live option quote width and open interest must still pass.", "Past performance does not predict future results."],
+    trades: [
+      { signalAt: "2026-08-20T19:45:00+00:00", symbol: "GOOGL", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5747, underlyingProxyReturn: -0.0064 },
+      { signalAt: "2026-08-21T19:45:00+00:00", symbol: "META", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5613, underlyingProxyReturn: -0.0076 },
+      { signalAt: "2026-08-24T19:45:00+00:00", symbol: "GOOGL", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5773, underlyingProxyReturn: 0.0035 },
+      { signalAt: "2026-08-25T19:45:00+00:00", symbol: "WMT", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5564, underlyingProxyReturn: 0.0082 },
+      { signalAt: "2026-08-28T13:30:00+00:00", symbol: "AMD", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5997, underlyingProxyReturn: 0.0017 },
+      { signalAt: "2026-08-28T19:45:00+00:00", symbol: "LLY", direction: "bullish", optionBias: "call_debit_spread", conviction: 0.5902, underlyingProxyReturn: -0.0169 },
+      { signalAt: "2026-08-31T19:15:00+00:00", symbol: "NVDA", direction: "bullish", optionBias: "call_debit_spread", conviction: 0.5508, underlyingProxyReturn: -0.0102 },
+      { signalAt: "2026-09-01T18:45:00+00:00", symbol: "NFLX", direction: "bullish", optionBias: "call_debit_spread", conviction: 0.5594, underlyingProxyReturn: 0.0153 },
+      { signalAt: "2026-09-02T14:45:00+00:00", symbol: "AVGO", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5698, underlyingProxyReturn: -0.0042 },
+      { signalAt: "2026-09-02T19:15:00+00:00", symbol: "AVGO", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5551, underlyingProxyReturn: 0.0571 },
+      { signalAt: "2026-09-03T13:30:00+00:00", symbol: "AAPL", direction: "bullish", optionBias: "call_debit_spread", conviction: 0.5897, underlyingProxyReturn: 0.0081 },
+      { signalAt: "2026-09-03T19:00:00+00:00", symbol: "AMD", direction: "bearish", optionBias: "put_debit_spread", conviction: 0.5518, underlyingProxyReturn: -0.0285 },
+    ],
   },
 ];

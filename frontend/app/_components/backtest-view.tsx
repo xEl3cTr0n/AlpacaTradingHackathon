@@ -1,4 +1,4 @@
-import { CalendarRange, CheckCircle2, DatabaseZap, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
+import { CalendarRange, CheckCircle2, DatabaseZap, History, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import { backtestReports } from "@/lib/backtest-results";
 
 const pct = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
@@ -23,6 +23,27 @@ export function BacktestView() {
             <article><span>Max drawdown</span><strong className="negative"><TrendingDown size={17} />{pct(report.holdout.maxDrawdown)}</strong><small>Holdout period</small></article>
           </div>
           <div className="backtest-detail-grid"><div><h3>Fixed policy</h3><dl>{report.parameters.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div><div><h3>Method &amp; limits</h3><p>{report.methodology}</p><ul>{report.limitations.map((item) => <li key={item}>{item}</li>)}</ul></div></div>
+          {report.trades && report.trades.length > 0 && (
+            <details className="replay-ledger">
+              <summary><span><History size={15} aria-hidden="true" /> Historical execution replay</span><small>{report.trades.length} recent holdout signals</small></summary>
+              <p className="replay-warning"><ShieldCheck size={14} aria-hidden="true" /> Backtest proxy only. These are not Alpaca paper fills and are excluded from live account P&amp;L.</p>
+              <div className="replay-table-scroll">
+                <table>
+                  <caption>Recent out-of-sample scanner signals and their underlying proxy returns</caption>
+                  <thead><tr><th>Signal time</th><th>Symbol</th><th>Bias</th><th>Conviction</th><th>8-bar return</th></tr></thead>
+                  <tbody>{report.trades.map((trade) => (
+                    <tr key={`${trade.signalAt}-${trade.symbol}`}>
+                      <td>{new Date(trade.signalAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td>
+                      <td><strong>{trade.symbol}</strong></td>
+                      <td><span className={`replay-bias ${trade.direction}`}>{trade.direction === "bullish" ? "CALL" : "PUT"}</span></td>
+                      <td>{(trade.conviction * 100).toFixed(1)}%</td>
+                      <td className={trade.underlyingProxyReturn >= 0 ? "positive" : "negative"}>{pct(trade.underlyingProxyReturn)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </details>
+          )}
         </section>
       ))}
     </div>
