@@ -106,9 +106,7 @@ def test_scanner_signal_is_a_structured_council_vote_and_sets_direction() -> Non
     closes = [100 + index * 0.8 for index in range(80)]
     closes[-2] = 145
     closes[-1] = 180
-    signal = LargeCapScanner().score(
-        "AAPL", "Apple", points(closes, 2_000_000), benchmark, 79
-    )
+    signal = LargeCapScanner().score("AAPL", "Apple", points(closes, 2_000_000), benchmark, 79)
     assert signal is not None and signal.actionable
 
     result = DecisionPipeline(Settings(market_data_mode="demo"), DemoMarketDataProvider()).analyze(
@@ -121,3 +119,81 @@ def test_scanner_signal_is_a_structured_council_vote_and_sets_direction() -> Non
     assert result.scanner_signal == signal
     assert any(vote.agent == "Scanner" for vote in result.council.votes)
     assert any(agent.agent == "Scanner" for agent in result.agents)
+    assert result.council.required_support == 3
+
+    exploration = signal.model_copy(
+        update={
+            "conviction": 0.57,
+            "signal_tier": "exploration",
+            "risk_cap_dollars": 500,
+        }
+    )
+    exploration_result = DecisionPipeline(
+        Settings(market_data_mode="demo"), DemoMarketDataProvider()
+    ).analyze(
+        "AAPL",
+        AnalysisControls(min_confidence=exploration.conviction, max_loss_cap_dollars=500),
+        scanner_signal=exploration,
+    )
+    assert exploration_result.council.required_support == 2
+    assert exploration_result.strategy.max_loss_dollars == 500
+
+
+def test_missing_gex_keeps_only_half_size_exploration_eligible() -> None:
+    start = datetime(2025, 1, 2, tzinfo=UTC)
+
+    def points(closes: list[float], volume: int) -> list[PricePoint]:
+        return [
+            PricePoint(
+                timestamp=start + timedelta(days=index),
+                open=close,
+                high=close * 1.01,
+                low=close * 0.99,
+                close=close,
+                volume=volume * (2 if index == len(closes) - 1 else 1),
+            )
+            for index, close in enumerate(closes)
+        ]
+
+    benchmark = points([400 + index * 0.5 for index in range(80)], 5_000_000)
+    closes = [100 + index * 0.8 for index in range(80)]
+    closes[-2] = 145
+    closes[-1] = 180
+    signal = LargeCapScanner().score("AAPL", "Apple", points(closes, 2_000_000), benchmark, 79)
+    assert signal is not None
+    signal = signal.model_copy(
+        update={
+            "conviction": 0.57,
+            "signal_tier": "exploration",
+            "risk_cap_dollars": 500,
+        }
+    )
+    pipeline = DecisionPipeline(Settings(market_data_mode="demo"), DemoMarketDataProvider())
+    result = pipeline.analyze(
+        "AAPL",
+        AnalysisControls(min_confidence=0.57, max_loss_cap_dollars=500),
+        scanner_signal=signal,
+    )
+    pipeline.settings.market_data_mode = "alpaca"
+    bull = next(agent for agent in result.agents if agent.agent == "Bull").model_copy(
+        update={"confidence": 0.8}
+    )
+    bear = next(agent for agent in result.agents if agent.agent == "Bear").model_copy(
+        update={"confidence": 0.4}
+    )
+
+    risk = pipeline._risk_gate(
+        result.regime.model_copy(update={"direction": signal.direction, "confidence": 0.8}),
+        result.swing,
+        result.options_microstructure,
+        result.strategy,
+        bull,
+        bear,
+        result.council.model_copy(update={"approved": True}),
+        result.controls,
+        signal,
+    )
+
+    assert risk.approved is True
+    assert risk.max_allowed_loss == 500
+    assert any("Live GEX unavailable" in reason for reason in risk.reasons)

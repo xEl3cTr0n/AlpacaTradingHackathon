@@ -297,6 +297,7 @@ class CouncilDecision(BaseModel):
     abstain_count: int = Field(ge=0)
     weighted_support: float = Field(ge=0, le=1)
     approval_threshold: float = Field(ge=0.5, le=0.9)
+    required_support: int = Field(ge=1)
     quorum_met: bool
     approved: bool
 

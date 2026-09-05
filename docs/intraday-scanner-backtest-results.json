@@ -1,5 +1,5 @@
 {
-  "methodology": "15-minute 18 EMA cross with prior-session daily 18/50 trend context; next-bar open entry; eight-bar hold; one top-ranked position at a time; 70/30 chronological split; 20 bps underlying-proxy friction",
+  "methodology": "15-minute 18 EMA cross with prior-session daily 18/50 symbol trend; next-bar open entry; eight-bar hold; one top-ranked position at a time; SPY context is advisory; 70/30 chronological split; 20 bps underlying-proxy friction",
   "parameters": {
     "timeframe": "15Min",
     "ema_period": 18,
@@ -10,51 +10,51 @@
     "friction": 0.002
   },
   "universe_size": 24,
-  "split_time": "2026-07-30T17:45:00+00:00",
+  "split_time": "2026-07-13T14:00:00+00:00",
   "tiers": {
     "production": {
       "train": {
-        "trades": 12,
-        "win_rate": 0.3333,
-        "total_return": -0.0068,
-        "average_return": -0.0005,
-        "sharpe": -0.875,
-        "max_drawdown": -0.0435,
-        "calls": 12,
-        "puts": 0
+        "trades": 22,
+        "win_rate": 0.5455,
+        "total_return": 0.1168,
+        "average_return": 0.0052,
+        "sharpe": 9.612,
+        "max_drawdown": -0.0253,
+        "calls": 19,
+        "puts": 3
       },
       "holdout": {
-        "trades": 7,
-        "win_rate": 0.4286,
-        "total_return": -0.0817,
-        "average_return": -0.0116,
-        "sharpe": -10.836,
-        "max_drawdown": -0.0903,
-        "calls": 6,
-        "puts": 1
+        "trades": 6,
+        "win_rate": 0.6667,
+        "total_return": -0.0734,
+        "average_return": -0.012,
+        "sharpe": -10.351,
+        "max_drawdown": -0.0855,
+        "calls": 3,
+        "puts": 3
       },
       "gate_passed": false
     },
     "exploration": {
       "train": {
-        "trades": 27,
-        "win_rate": 0.4444,
-        "total_return": -0.041,
-        "average_return": -0.0013,
-        "sharpe": -1.76,
-        "max_drawdown": -0.0591,
-        "calls": 27,
-        "puts": 0
+        "trades": 75,
+        "win_rate": 0.4933,
+        "total_return": 0.2312,
+        "average_return": 0.003,
+        "sharpe": 4.173,
+        "max_drawdown": -0.0943,
+        "calls": 49,
+        "puts": 26
       },
       "holdout": {
-        "trades": 22,
-        "win_rate": 0.5909,
-        "total_return": 0.0408,
-        "average_return": 0.0019,
-        "sharpe": 6.433,
-        "max_drawdown": -0.027,
-        "calls": 22,
-        "puts": 0
+        "trades": 44,
+        "win_rate": 0.4773,
+        "total_return": 0.0849,
+        "average_return": 0.0021,
+        "sharpe": 2.653,
+        "max_drawdown": -0.1397,
+        "calls": 24,
+        "puts": 20
       },
       "gate_passed": true
     }
@@ -67,12 +67,12 @@
     "Underlying-proxy friction does not model option premium elasticity; live option quote-width and open-interest gates are still mandatory.",
     "Past proxy performance does not predict future results."
   ],
-  "generated_at": "2026-09-04T10:57:02.810932+00:00",
+  "generated_at": "2026-09-05T11:12:12.307754+00:00",
   "source": "Alpaca IEX fully adjusted 15-minute bars",
   "history": {
-    "calendar_days_requested": 120,
-    "benchmark_bars": 2481,
-    "start": "2026-05-07T12:00:00+00:00",
-    "end": "2026-09-03T20:15:00+00:00"
+    "calendar_days_requested": 180,
+    "benchmark_bars": 3867,
+    "start": "2026-03-09T12:00:00+00:00",
+    "end": "2026-09-04T19:45:00+00:00"
   }
 }

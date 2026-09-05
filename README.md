@@ -81,11 +81,15 @@ through the paper-only CLI runner and the separately locked manual MLeg endpoint
 ### Trade criteria
 
 A directional autonomous trade needs a completed 18 EMA crossover or validated
-swing breakout, daily 18/50 trend alignment, SPY alignment, at least $100M of
-average daily dollar volume, relative-strength/volume conviction, 3 of 6 council
-votes, live quote/liquidity checks, and deterministic Risk approval. The GEX lane
-adds three structure rules: missing or low-quality chain data fails closed;
-negative gamma reduces maximum position loss to $500; and gamma concentration at or above
+swing breakout, daily 18/50 symbol-trend alignment, at least $100M of average
+daily dollar volume, relative-strength/volume conviction, council quorum and
+weighted approval, live quote/liquidity checks, and deterministic Risk approval.
+SPY and sector direction are advisory council evidence for the intraday scanner,
+not duplicate hard vetoes. Production needs three supporting votes; the
+backtested half-size exploration tier needs two, no more than one opponent, and
+the same quorum and weighted threshold. The GEX lane adds three structure rules:
+missing or low-quality chain data fails production closed and holds exploration
+to $500; negative gamma reduces maximum position loss to $500; and gamma concentration at or above
 60% requires a confirmed breakout before chasing direction. `NO_TRADE` remains
 a normal result. The normal paper budget is the lower of 1% of modeled equity
 or $1,000. A managed exit triggers near a 50% loss, but the Risk Agent reserves
@@ -206,11 +210,12 @@ scanner-universe debit spreads and cannot route to a live account.
 
 The dashboard Scanner workspace performs a read-only pass over 24 large-cap
 stocks using completed 15-minute bars. A candidate is actionable only when
-price crosses the intraday 18 EMA, the prior-session daily 18/50 trend and SPY
-direction agree, 20-session dollar volume exceeds $100M, and composite
+price crosses the intraday 18 EMA, its prior-session daily 18/50 trend agrees,
+20-session dollar volume exceeds $100M, and composite
 conviction is at least 55%. Signals at 60%+ are production candidates; the
 55–60% exploration tier has a deterministic $500 half-size maximum-loss cap and a
-separate execution lock. The CLI then checks bid/ask width and at least 50 open
+separate execution lock. Crosses older than 90 minutes become watch-only. SPY
+and sector context remain council votes. The CLI then checks bid/ask width and at least 50 open
 contracts on both equity-option legs.
 
 Run one scan and optional CLI dry-run:
@@ -222,7 +227,7 @@ backend/.venv/bin/python scripts/scanner_runner.py
 Run continuously every 5 minutes (signals still use completed 15-minute bars):
 
 ```bash
-backend/.venv/bin/python scripts/scanner_runner.py --loop --interval-minutes 5
+backend/.venv/bin/python scripts/scanner_runner.py --loop --market-session --max-cycles 68 --interval-minutes 5
 ```
 
 Use `--timeframe daily` to run the production policy backed by the five-year
@@ -233,8 +238,10 @@ the 60%+ intraday production tier stays locked because its holdout failed.
 
 Vercel serves the dashboard and reads Alpaca telemetry, but it does not keep the
 CLI runner alive. The included `RegimeShift paper trading` GitHub Actions workflow
-runs the scanner every 5 minutes during the broad US market-hours window. Signals
-still use completed 15-minute bars.
+starts two bounded workers each weekday. Each worker reads Alpaca's paper clock,
+loops every five minutes while the session is open, and stops after the close or
+its cycle cap. Signals still use completed 15-minute bars. This avoids depending
+on GitHub's best-effort scheduler for every individual five-minute cycle.
 
 Add `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as GitHub Actions repository secrets.
 This hackathon branch explicitly enables paper and $500 exploration execution in

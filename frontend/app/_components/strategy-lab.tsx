@@ -75,7 +75,7 @@ export function StrategyLab({ snapshot, onSnapshot }: { snapshot: DecisionSnapsh
         </article>
         <article className="panel council-panel">
           <div className="panel-heading"><div><p className="eyebrow">Deterministic consensus</p><h2>{snapshot.council.votes.length}-agent vote</h2></div><strong>{pct(snapshot.council.weighted_support)}</strong></div>
-          <div className="vote-summary"><span className="support">{snapshot.council.support_count} support</span><span className="oppose">{snapshot.council.oppose_count} oppose</span><span className="abstain">{snapshot.council.abstain_count} abstain</span></div>
+          <div className="vote-summary"><span className="support">{snapshot.council.support_count}/{snapshot.council.required_support} support</span><span className="oppose">{snapshot.council.oppose_count} oppose</span><span className="abstain">{snapshot.council.abstain_count} abstain</span></div>
           <ul>{snapshot.council.votes.map((vote) => <li key={vote.agent}><strong>{vote.agent}</strong><span className={`vote-chip ${vote.vote}`}>{vote.vote}</span><small>{pct(vote.confidence)}</small></li>)}</ul>
         </article>
         <article className="panel tools-panel">

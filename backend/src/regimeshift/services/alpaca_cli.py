@@ -49,7 +49,8 @@ class AlpacaCliAdapter:
                 "clock",
                 "--quiet",
                 "--jq",
-                "{timestamp: .timestamp, is_open: .is_open}",
+                "{timestamp: .timestamp, is_open: .is_open, "
+                "next_open: .next_open, next_close: .next_close}",
             ]
         )
         return {"account": account, "clock": clock, "paper_only": True}
@@ -73,11 +74,7 @@ class AlpacaCliAdapter:
         today = datetime.now(UTC).date()
         start = today + timedelta(days=max(21 if underlying == "XSP" else 7, target - 5))
         end = today + timedelta(days=min(45 if underlying == "XSP" else 60, target + 5))
-        option_type = (
-            "call"
-            if snapshot.strategy.name == StrategyName.BULL_CALL_SPREAD
-            else "put"
-        )
+        option_type = "call" if snapshot.strategy.name == StrategyName.BULL_CALL_SPREAD else "put"
         spot = snapshot.market.current_price
         contracts_payload = self._run(
             [
@@ -114,9 +111,7 @@ class AlpacaCliAdapter:
 
         expiry = min(
             {contract["expiration_date"] for contract in contracts},
-            key=lambda value: abs(
-                (datetime.fromisoformat(value).date() - today).days - target
-            ),
+            key=lambda value: abs((datetime.fromisoformat(value).date() - today).days - target),
         )
         same_expiry = [contract for contract in contracts if contract["expiration_date"] == expiry]
         long_contract = min(
@@ -141,9 +136,7 @@ class AlpacaCliAdapter:
         )
         short_contract = min(
             short_candidates,
-            key=lambda contract: abs(
-                float(contract["strike_price"]) - target_short_strike
-            ),
+            key=lambda contract: abs(float(contract["strike_price"]) - target_short_strike),
         )
         short_strike = float(short_contract["strike_price"])
         chain = self._run(
@@ -180,11 +173,7 @@ class AlpacaCliAdapter:
             and short_open_interest is not None
             and min(long_open_interest, short_open_interest) >= 50
         )
-        liquid = (
-            self._liquid(long_quote)
-            and self._liquid(short_quote)
-            and open_interest_passed
-        )
+        liquid = self._liquid(long_quote) and self._liquid(short_quote) and open_interest_passed
 
         return {
             "provider": "Alpaca CLI 0.0.14",
@@ -278,8 +267,7 @@ class AlpacaCliAdapter:
                 "get",
                 "--quiet",
                 "--jq",
-                "{equity: .equity, last_equity: .last_equity, "
-                "trading_blocked: .trading_blocked}",
+                "{equity: .equity, last_equity: .last_equity, trading_blocked: .trading_blocked}",
             ]
         )
         equity = float(account.get("equity") or 0)

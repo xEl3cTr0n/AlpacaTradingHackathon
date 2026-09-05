@@ -3,7 +3,10 @@ name: RegimeShift paper trading
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 13-21 * * 1-5"
+    # Two long-running workers cover the session more reliably than a crowded
+    # every-five-minute GitHub scheduler. The runner checks Alpaca's clock.
+    - cron: "33 13 * * 1-5"
+    - cron: "17 19 * * 1-5"
 
 concurrency:
   group: regimeshift-paper-trading
@@ -15,7 +18,7 @@ permissions:
 jobs:
   scan-and-trade:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 355
     env:
       ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
       ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
@@ -60,31 +63,32 @@ jobs:
             exit 2
           fi
           python scripts/verify_backtest_gate.py --github-output "$GITHUB_OUTPUT"
-      - name: Run gated paper cycle
+      - name: Run gated paper session
         shell: bash
         run: |
           set -o pipefail
-          intraday_arguments=(--timeframe intraday)
-          if [[ "$ENABLE_PAPER_ORDERS" == "true" && "$ENABLE_EXPLORATION_ORDERS" == "true" && "${{ steps.backtest.outputs.exploration_gate }}" == "true" ]]; then
-            intraday_arguments+=(--execute)
-          elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
-            echo "Intraday paper entry remains preview-only because its exploration gate or repository switch is closed."
-          fi
-          python scripts/scanner_runner.py "${intraday_arguments[@]}" | tee intraday-cycle.json
-          daily_arguments=(--timeframe daily)
+          daily_arguments=(--timeframe daily --loop --market-session --max-cycles 1 --interval-minutes 5)
           if [[ "$ENABLE_PAPER_ORDERS" == "true" && "${{ steps.backtest.outputs.daily_production_gate }}" == "true" ]]; then
             daily_arguments+=(--execute)
           elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
             echo "Daily paper entry remains preview-only because its holdout gate failed."
           fi
-          python scripts/scanner_runner.py "${daily_arguments[@]}" | tee daily-cycle.json
+          python scripts/scanner_runner.py "${daily_arguments[@]}" | tee daily-cycle.log
+
+          intraday_arguments=(--timeframe intraday --loop --market-session --max-cycles 68 --interval-minutes 5)
+          if [[ "$ENABLE_PAPER_ORDERS" == "true" && "$ENABLE_EXPLORATION_ORDERS" == "true" && "${{ steps.backtest.outputs.exploration_gate }}" == "true" ]]; then
+            intraday_arguments+=(--execute)
+          elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
+            echo "Intraday paper entry remains preview-only because its exploration gate or repository switch is closed."
+          fi
+          python scripts/scanner_runner.py "${intraday_arguments[@]}" | tee intraday-cycles.log
       - name: Upload inspectable decision receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-cycle-${{ github.run_id }}
           path: |
-            intraday-cycle.json
-            daily-cycle.json
+            intraday-cycles.log
+            daily-cycle.log
           if-no-files-found: ignore
           retention-days: 30

@@ -58,7 +58,8 @@ the runner's explicit `--execute` flag and all of these conditions:
 1. The six core agents plus scanner evidence (when present) approve the proposed direction.
 2. The separate deterministic Risk gate approves it.
 3. The signal is either a validated SPY swing breakout or a scanner-qualified
-   18 EMA cross with trend, market, relative-strength, and volume confirmation.
+   18 EMA cross with symbol trend, relative-strength, and volume confirmation;
+   SPY and sector context remain inspectable council votes.
 4. The instrument is a one-lot, defined-risk XSP index spread or a spread on a
    stock in the scanner's fixed large-cap universe.
 5. Alpaca CLI contract discovery, live bid/ask checks, and (for equity options)
@@ -71,7 +72,9 @@ bounded 0–45 DTE, 85–115% moneyness chain. It joins Alpaca snapshot Greeks t
 contract open interest and records data quality and the dealer-position
 assumption. GEX is volatility/structure evidence, not a standalone direction
 signal. Missing data abstains in the council and vetoes production authorization;
-negative gamma imposes a $500 half-size cap, while high GMC requires a confirmed breakout.
+the validated exploration tier may continue only at its $500 half-size cap and
+must still pass live CLI quote-width and open-interest checks. Negative gamma
+also imposes a $500 cap, while high GMC requires a confirmed breakout.
 The professor-supplied `modGammaProfile` scoring is ported as a pure calculation
 for call/put walls, directional bias, put trapdoor, key gamma, key delta, and
 hedge wall. Those levels are exposed as evidence and chart overlays only, so
@@ -82,7 +85,7 @@ ten nearest requested ITM/OTM calls or puts, then requires a structurally valid
 vertical spread. Submission remains a one-lot atomic MLeg paper order protected
 by preview validation, the operator token, and explicit `PAPER` confirmation.
 
-The scheduled worker evaluates every qualified scanner candidate through the
+The two scheduled market-session workers evaluate every qualified scanner candidate through the
 council rather than stopping at the first veto. The backtested daily production
 tier can execute when explicitly enabled. Intraday exploration can execute at a
 $500 cap because its dated holdout gate passed; intraday production remains

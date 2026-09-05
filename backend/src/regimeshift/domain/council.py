@@ -71,11 +71,16 @@ class VotingCouncil:
             else 0.0
         )
         quorum_met = len(support) + len(oppose) >= 3
+        exploration_signal = bool(
+            scanner_signal is not None and scanner_signal.signal_tier == "exploration"
+        )
+        required_support = 2 if exploration_signal else self.minimum_directional_support
         approved = (
             strategy != StrategyName.NO_TRADE
             and quorum_met
-            and len(support) >= self.minimum_directional_support
+            and len(support) >= required_support
             and weighted_support >= threshold
+            and (not exploration_signal or len(oppose) <= 1)
         )
         return CouncilDecision(
             votes=votes,
@@ -84,19 +89,14 @@ class VotingCouncil:
             abstain_count=abstain_count,
             weighted_support=round(weighted_support, 3),
             approval_threshold=threshold,
+            required_support=required_support,
             quorum_met=quorum_met,
             approved=approved,
         )
 
     @staticmethod
-    def _scanner_vote(
-        direction: Direction, signal: ScannerCandidate
-    ) -> CouncilVote:
-        aligned = (
-            signal.actionable
-            and signal.market_aligned
-            and signal.direction == direction
-        )
+    def _scanner_vote(direction: Direction, signal: ScannerCandidate) -> CouncilVote:
+        aligned = signal.actionable and signal.direction == direction
         return _vote(
             "Scanner",
             VoteChoice.SUPPORT if aligned else VoteChoice.OPPOSE,
@@ -146,9 +146,7 @@ class VotingCouncil:
     def _technical_vote(direction: Direction, regime: RegimeAssessment) -> CouncilVote:
         if direction == Direction.SIDEWAYS:
             choice = (
-                VoteChoice.SUPPORT
-                if regime.direction == Direction.SIDEWAYS
-                else VoteChoice.OPPOSE
+                VoteChoice.SUPPORT if regime.direction == Direction.SIDEWAYS else VoteChoice.OPPOSE
             )
         elif regime.direction == direction:
             choice = VoteChoice.SUPPORT
@@ -168,9 +166,7 @@ class VotingCouncil:
 
         if direction == Direction.SIDEWAYS:
             choice = (
-                VoteChoice.SUPPORT
-                if swing_direction == Direction.SIDEWAYS
-                else VoteChoice.OPPOSE
+                VoteChoice.SUPPORT if swing_direction == Direction.SIDEWAYS else VoteChoice.OPPOSE
             )
         elif swing_direction == Direction.SIDEWAYS:
             choice = VoteChoice.ABSTAIN
@@ -181,9 +177,7 @@ class VotingCouncil:
         return _vote("Swing", choice, swing.confidence, swing.rationale)
 
     @staticmethod
-    def _rotation_vote(
-        direction: Direction, rotation: SectorRotationAssessment
-    ) -> CouncilVote:
+    def _rotation_vote(direction: Direction, rotation: SectorRotationAssessment) -> CouncilVote:
         if rotation.signal == RotationSignal.MIXED:
             choice = VoteChoice.SUPPORT if direction == Direction.SIDEWAYS else VoteChoice.ABSTAIN
         elif direction == Direction.BULLISH:
@@ -213,9 +207,7 @@ class VotingCouncil:
         return _vote("Research", choice, research.confidence, research.summary)
 
     @staticmethod
-    def _advocate_vote(
-        direction: Direction, bull: AgentVerdict, bear: AgentVerdict
-    ) -> CouncilVote:
+    def _advocate_vote(direction: Direction, bull: AgentVerdict, bear: AgentVerdict) -> CouncilVote:
         if direction == Direction.BULLISH:
             margin = bull.confidence - bear.confidence
             choice = VoteChoice.SUPPORT if margin >= 0.08 else VoteChoice.OPPOSE

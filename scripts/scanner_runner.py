@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: BLE001
 """Scan liquid large caps and preview/submit the strongest gated paper trade."""
 
 import argparse
@@ -13,19 +14,18 @@ ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / ".scanner-state.json"
 sys.path.insert(0, str(ROOT / "backend" / "src"))
 
-from gpt_mcp_research import research as gpt_mcp_research  # noqa: E402
-
-from regimeshift.config import Settings  # noqa: E402
-from regimeshift.domain.models import (  # noqa: E402
+from gpt_mcp_research import research as gpt_mcp_research
+from regimeshift.config import Settings
+from regimeshift.domain.models import (
     AgentVerdict,
     AnalysisControls,
     InstrumentMode,
     Stance,
 )
-from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner  # noqa: E402
-from regimeshift.orchestration.pipeline import DecisionPipeline  # noqa: E402
-from regimeshift.services.alpaca_cli import AlpacaCliAdapter  # noqa: E402
-from regimeshift.services.market_data import AlpacaMarketDataProvider  # noqa: E402
+from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
+from regimeshift.orchestration.pipeline import DecisionPipeline
+from regimeshift.services.alpaca_cli import AlpacaCliAdapter
+from regimeshift.services.market_data import AlpacaMarketDataProvider
 
 
 def run_cycle(
@@ -66,7 +66,9 @@ def run_cycle(
     }
     cli = AlpacaCliAdapter(settings)
     verification: dict[str, object] | None = None
-    directions = {candidate.symbol: candidate.direction for candidate in scan.candidates}
+    directions = {
+        candidate.symbol: candidate.direction for candidate in scan.candidates
+    }
     exit_plans = cli.managed_exit_plans(directions)
     exit_results: list[dict[str, object]] = []
     if exit_plans:
@@ -79,7 +81,9 @@ def run_cycle(
                     "underlying_symbol": plan["underlying_symbol"],
                     "reasons": plan["reasons"],
                     "unrealized_pnl": plan["unrealized_pnl"],
-                    "status": result["status"] if market_open or not execute else "market_closed",
+                    "status": result["status"]
+                    if market_open or not execute
+                    else "market_closed",
                     "paper_only": True,
                 }
             )
@@ -90,9 +94,7 @@ def run_cycle(
     summary["evaluations"] = []
     pipeline = DecisionPipeline(settings, market_data)
     for candidate in candidates:
-        signal_key = (
-            f"{candidate.symbol}:{candidate.as_of.isoformat()}:{candidate.pattern.value}"
-        )
+        signal_key = f"{candidate.symbol}:{candidate.as_of.isoformat()}:{candidate.pattern.value}"
         exploration = candidate.signal_tier == "exploration"
         research_advice = None
         if settings.enable_gpt_mcp_research:
@@ -119,7 +121,9 @@ def run_cycle(
                 instrument_mode=InstrumentMode.EQUITY_OPTION,
                 min_confidence=max(0.55, candidate.conviction),
                 target_dte=target_dte,
-                max_loss_cap_dollars=(candidate.risk_cap_dollars if exploration else None),
+                max_loss_cap_dollars=(
+                    candidate.risk_cap_dollars if exploration else None
+                ),
             ),
             scanner_signal=candidate,
             research_advice=research_advice,
@@ -206,15 +210,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--loop", action="store_true")
+    parser.add_argument(
+        "--market-session",
+        action="store_true",
+        help="Wait before today's open and stop when the next open is another date",
+    )
+    parser.add_argument("--max-cycles", type=int, default=0)
     parser.add_argument("--interval-minutes", type=int, default=15)
     parser.add_argument("--limit", type=int, default=12)
     parser.add_argument("--target-dte", type=int, default=30)
-    parser.add_argument("--timeframe", choices=("intraday", "daily"), default="intraday")
+    parser.add_argument(
+        "--timeframe", choices=("intraday", "daily"), default="intraday"
+    )
     args = parser.parse_args()
     if not 5 <= args.interval_minutes <= 240:
         parser.error("--interval-minutes must be between 5 and 240")
     if not 1 <= args.limit <= len(LARGE_CAP_UNIVERSE):
         parser.error(f"--limit must be between 1 and {len(LARGE_CAP_UNIVERSE)}")
+    if args.max_cycles < 0:
+        parser.error("--max-cycles cannot be negative")
 
     settings = Settings(market_data_mode="alpaca", alpaca_cli_enabled=True)
     submitted_signals: set[str] = set()
@@ -224,9 +238,68 @@ def main() -> int:
             submitted_signals = set(state.get("submitted_signals", []))
         except (json.JSONDecodeError, OSError, AttributeError):
             if args.execute:
-                print("Scanner state is unreadable; refusing paper execution.", file=sys.stderr)
+                print(
+                    "Scanner state is unreadable; refusing paper execution.",
+                    file=sys.stderr,
+                )
                 return 1
+    completed_cycles = 0
     while True:
+        if args.market_session:
+            try:
+                verification = AlpacaCliAdapter(settings).verify()
+            except Exception as error:
+                print(
+                    json.dumps(
+                        {
+                            "generated_at": datetime.now(UTC).isoformat(),
+                            "paper_only": True,
+                            "error": f"Paper clock check failed: {str(error)[:400]}",
+                        },
+                        indent=2,
+                    ),
+                    flush=True,
+                )
+                if not args.loop:
+                    return 1
+                time.sleep(args.interval_minutes * 60)
+                continue
+            clock = verification["clock"]
+            if not bool(clock.get("is_open")):
+                timestamp = datetime.fromisoformat(str(clock["timestamp"]))
+                next_open = datetime.fromisoformat(str(clock["next_open"]))
+                if timestamp.date() != next_open.date():
+                    print(
+                        json.dumps(
+                            {
+                                "generated_at": datetime.now(UTC).isoformat(),
+                                "paper_only": True,
+                                "execution": {
+                                    "status": "market_closed",
+                                    "reason": "Next paper session opens on another date; worker stopped",
+                                },
+                            },
+                            indent=2,
+                        ),
+                        flush=True,
+                    )
+                    return 0
+                print(
+                    json.dumps(
+                        {
+                            "generated_at": datetime.now(UTC).isoformat(),
+                            "paper_only": True,
+                            "execution": {
+                                "status": "waiting_for_open",
+                                "next_open": clock["next_open"],
+                            },
+                        },
+                        indent=2,
+                    ),
+                    flush=True,
+                )
+                time.sleep(args.interval_minutes * 60)
+                continue
         try:
             report = run_cycle(
                 settings,
@@ -237,6 +310,7 @@ def main() -> int:
                 timeframe=args.timeframe,
             )
             print(json.dumps(report, indent=2, default=str), flush=True)
+            completed_cycles += 1
         except Exception as error:  # keep an explicitly requested loop observable
             print(
                 json.dumps(
@@ -252,6 +326,8 @@ def main() -> int:
             if not args.loop:
                 return 1
         if not args.loop:
+            return 0
+        if args.max_cycles and completed_cycles >= args.max_cycles:
             return 0
         time.sleep(args.interval_minutes * 60)
 

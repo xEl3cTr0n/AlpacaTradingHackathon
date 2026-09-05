@@ -1,4 +1,5 @@
 import math
+from datetime import timedelta
 from statistics import mean, pstdev
 
 from regimeshift.domain.models import (
@@ -65,9 +66,7 @@ def relative_strength_index(values: list[float], period: int = 14) -> list[float
             average_loss = (average_loss * (period - 1) + loss) / period
         if index >= period:
             output[index] = (
-                100.0
-                if average_loss == 0
-                else 100 - 100 / (1 + average_gain / average_loss)
+                100.0 if average_loss == 0 else 100 - 100 / (1 + average_gain / average_loss)
             )
     return output
 
@@ -116,9 +115,7 @@ class LargeCapScanner:
                     index,
                     liquidity_points=(liquidity_histories or histories).get(symbol),
                     trend_points=(liquidity_histories or {}).get(symbol),
-                    benchmark_trend_points=(liquidity_histories or {}).get(
-                        self.benchmark_symbol
-                    ),
+                    benchmark_trend_points=(liquidity_histories or {}).get(self.benchmark_symbol),
                     annualization_periods=annualization_periods,
                 )
                 newest_candidate = newest_candidate or scored
@@ -126,6 +123,24 @@ class LargeCapScanner:
                     candidate = scored
                     break
             candidate = candidate or newest_candidate
+            if (
+                timeframe == "15Min"
+                and candidate is not None
+                and candidate.actionable
+                and max(point.timestamp for point in benchmark) - candidate.as_of
+                > timedelta(minutes=90)
+            ):
+                candidate = candidate.model_copy(
+                    update={
+                        "actionable": False,
+                        "signal_tier": "watch",
+                        "risk_cap_dollars": 0.0,
+                        "evidence": [
+                            *candidate.evidence,
+                            "Signal is older than 90 minutes and cannot authorize a new entry",
+                        ],
+                    }
+                )
             if candidate is not None:
                 candidates.append(candidate)
 
@@ -152,8 +167,9 @@ class LargeCapScanner:
             minimum_conviction=self.minimum_conviction,
             ema_period=self.ema_period,
             methodology=(
-                "15-minute 18 EMA crossover and 18/50 trend alignment, confirmed by SPY; "
+                "15-minute 18 EMA crossover with prior-session 18/50 trend alignment; "
                 "the latest four completed bars are checked to tolerate worker delay. "
+                "SPY and sector context remain council votes instead of hard vetoes. "
                 "Daily $100M average dollar volume is the first liquidity gate; contract "
                 "quotes and open interest are checked before execution. Production starts "
                 "at 60% conviction. The 55–60% exploration tier uses a $500 half-size cap."
@@ -192,9 +208,7 @@ class LargeCapScanner:
             point.timestamp: position for position, point in enumerate(benchmark)
         }
         benchmark_index = benchmark_by_timestamp.get(current.timestamp)
-        historical_benchmark_index = benchmark_by_timestamp.get(
-            points[index - 20].timestamp
-        )
+        historical_benchmark_index = benchmark_by_timestamp.get(points[index - 20].timestamp)
         if benchmark_index is None or historical_benchmark_index is None:
             return None
         if benchmark_index < 55:
@@ -268,23 +282,17 @@ class LargeCapScanner:
         average_volume = mean(point.volume for point in points[index - 20 : index])
         liquidity_points = liquidity_points or points
         completed_liquidity = [
-            point
-            for point in liquidity_points
-            if point.timestamp.date() < current.timestamp.date()
+            point for point in liquidity_points if point.timestamp.date() < current.timestamp.date()
         ]
         if completed_liquidity:
             liquidity_points = completed_liquidity
         if len(liquidity_points) < 20:
             return None
-        average_dollar_volume = mean(
-            point.close * point.volume for point in liquidity_points[-20:]
-        )
+        average_dollar_volume = mean(point.close * point.volume for point in liquidity_points[-20:])
         volume_ratio = current.volume / max(1, average_volume)
         benchmark_current = benchmark[benchmark_index].close
         benchmark_old = benchmark[historical_benchmark_index].close
-        relative_strength = (closes[-1] / closes[-21] - 1) - (
-            benchmark_current / benchmark_old - 1
-        )
+        relative_strength = (closes[-1] / closes[-21] - 1) - (benchmark_current / benchmark_old - 1)
         slope = ema_18[-1] / ema_18[-6] - 1
         daily_returns = [
             closes[position] / closes[position - 1] - 1
@@ -294,16 +302,12 @@ class LargeCapScanner:
         # A cross is actionable only when it agrees with the higher-timeframe
         # trend.  The old unqualified OR could mark a bearish cross inside a
         # bullish trend (or vice versa) as an actionable signal.
-        exact_cross = (
-            direction == Direction.BULLISH and bullish_cross
-        ) or (
+        exact_cross = (direction == Direction.BULLISH and bullish_cross) or (
             direction == Direction.BEARISH and bearish_cross
         )
 
         slope_score = min(1.0, abs(slope) / 0.04)
-        relative_strength_score = max(
-            0.0, min(1.0, relative_strength * direction_sign / 0.08)
-        )
+        relative_strength_score = max(0.0, min(1.0, relative_strength * direction_sign / 0.08))
         volume_score = max(0.0, min(1.0, (volume_ratio - 0.8) / 0.8))
         rsi_score = max(0.0, min(1.0, (rsi_14[-1] - 50) * direction_sign / 20))
         conviction = (
@@ -318,7 +322,6 @@ class LargeCapScanner:
         qualified_signal = bool(
             exact_cross
             and direction != Direction.SIDEWAYS
-            and market_aligned
             and liquidity_qualified
             and conviction >= self.exploration_conviction
         )

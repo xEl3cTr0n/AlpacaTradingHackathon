@@ -264,20 +264,6 @@ class IntradayScannerBacktester:
             point.timestamp: index for index, point in enumerate(benchmark)
         }
         benchmark_closes = [point.close for point in benchmark]
-        benchmark_daily = liquidity_histories.get(self.scanner.benchmark_symbol, [])
-        benchmark_daily_closes = [point.close for point in benchmark_daily]
-        benchmark_daily_50 = exponential_moving_average(
-            benchmark_daily_closes, self.scanner.trend_period
-        )
-        benchmark_state_by_date = {
-            benchmark_daily[index].timestamp.date(): (
-                benchmark_daily_closes[index] > benchmark_daily_50[index]
-                and benchmark_daily_50[index] > benchmark_daily_50[index - 5],
-                benchmark_daily_closes[index] < benchmark_daily_50[index]
-                and benchmark_daily_50[index] < benchmark_daily_50[index - 5],
-            )
-            for index in range(55, len(benchmark_daily))
-        }
         for symbol in LARGE_CAP_UNIVERSE:
             points = histories.get(symbol, [])
             daily = liquidity_histories.get(symbol, [])
@@ -313,15 +299,9 @@ class IntradayScannerBacktester:
                 if benchmark_index is None or old_benchmark_index is None:
                     continue
                 prior_dates = [date for date in daily_state_by_date if date < signal_time.date()]
-                benchmark_prior_dates = [
-                    date for date in benchmark_state_by_date if date < signal_time.date()
-                ]
-                if not prior_dates or not benchmark_prior_dates:
+                if not prior_dates:
                     continue
                 daily_bullish, daily_bearish = daily_state_by_date[prior_dates[-1]]
-                market_bullish, market_bearish = benchmark_state_by_date[
-                    benchmark_prior_dates[-1]
-                ]
                 bullish = (
                     closes[index - 1] <= ema_18[index - 1]
                     and closes[index] > ema_18[index]
@@ -335,11 +315,9 @@ class IntradayScannerBacktester:
                 if not bullish and not bearish:
                     continue
                 direction = Direction.BULLISH if bullish else Direction.BEARISH
-                market_aligned = (
-                    direction == Direction.BULLISH and market_bullish
-                ) or (direction == Direction.BEARISH and market_bearish)
-                if not market_aligned:
-                    continue
+                # SPY context is retained by the live council as an advisory
+                # vote. It is not a scanner-level veto for symbol-specific
+                # momentum.
                 eligible_adv = [
                     value
                     for date, value in adv_by_date.items()
@@ -428,9 +406,10 @@ class IntradayScannerBacktester:
             }
         return {
             "methodology": (
-                "15-minute 18 EMA cross with prior-session daily 18/50 trend context; "
+                "15-minute 18 EMA cross with prior-session daily 18/50 symbol trend; "
                 "next-bar open entry; eight-bar hold; one top-ranked position at a time; "
-                "70/30 chronological split; 20 bps underlying-proxy friction"
+                "SPY context is advisory; 70/30 chronological split; 20 bps "
+                "underlying-proxy friction"
             ),
             "parameters": {
                 "timeframe": "15Min",

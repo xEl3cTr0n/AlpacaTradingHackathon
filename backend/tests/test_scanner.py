@@ -66,3 +66,25 @@ def test_scanner_is_ranked_and_bounded() -> None:
     assert len(snapshot.candidates) == 5
     assert [candidate.rank for candidate in snapshot.candidates] == [1, 2, 3, 4, 5]
     assert snapshot.source == "test tape"
+
+
+def test_intraday_scanner_downgrades_stale_cross(monkeypatch) -> None:
+    benchmark = _points([400 + index * 0.5 for index in range(80)], volume=5_000_000)
+    closes = [100 + index * 0.8 for index in range(80)]
+    closes[-2] = 145
+    closes[-1] = 180
+    scanner = LargeCapScanner()
+    candidate = scanner.score("AAPL", "Apple", _points(closes, volume=2_000_000), benchmark, 79)
+    assert candidate is not None and candidate.actionable
+    stale = candidate.model_copy(update={"as_of": benchmark[-1].timestamp - timedelta(hours=2)})
+    monkeypatch.setattr(scanner, "score", lambda *args, **kwargs: stale)
+
+    snapshot = scanner.scan(
+        {"SPY": benchmark, "AAPL": _points(closes, volume=2_000_000)},
+        timeframe="15Min",
+    )
+
+    assert snapshot.candidates[0].actionable is False
+    assert snapshot.candidates[0].signal_tier == "watch"
+    assert snapshot.candidates[0].risk_cap_dollars == 0
+    assert "older than 90 minutes" in snapshot.candidates[0].evidence[-1]

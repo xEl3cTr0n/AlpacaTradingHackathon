@@ -167,6 +167,7 @@ export interface DecisionSnapshot {
     abstain_count: number;
     weighted_support: number;
     approval_threshold: number;
+    required_support: number;
     quorum_met: boolean;
     approved: boolean;
   };

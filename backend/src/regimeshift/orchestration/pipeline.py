@@ -72,12 +72,8 @@ class DecisionPipeline:
         regime = self.regime_engine.assess(market.prices)
         swing = self.swing_engine.assess(market.prices)
         rotation_symbols = [self.rotation_engine.benchmark_symbol, *SECTOR_UNIVERSE]
-        rotation = self.rotation_engine.assess(
-            self.market_data.get_price_history(rotation_symbols)
-        )
-        microstructure = self.options_provider.get_assessment(
-            market.symbol, market.current_price
-        )
+        rotation = self.rotation_engine.assess(self.market_data.get_price_history(rotation_symbols))
+        microstructure = self.options_provider.get_assessment(market.symbol, market.current_price)
         macro = get_macro_quad() if settings_market_is_live(self.settings) else get_demo_macro()
         bottom_up = assess_bottom_up(regime, rotation)
         mood_vibe = assess_mood_vibe(microstructure, bottom_up, regime)
@@ -89,9 +85,7 @@ class DecisionPipeline:
         rotation_agent = self._rotation_agent(rotation)
         bull = self._bull_agent(regime, research, rotation, scanner_signal)
         bear = self._bear_agent(regime, research, rotation, scanner_signal)
-        strategy = self._select_strategy(
-            market.symbol, regime, swing, microstructure, controls
-        )
+        strategy = self._select_strategy(market.symbol, regime, swing, microstructure, controls)
         council = self.voting_council.evaluate(
             strategy.name,
             regime,
@@ -158,8 +152,7 @@ class DecisionPipeline:
             stance=Stance.SUPPORT if signal.actionable else Stance.NEUTRAL,
             confidence=signal.conviction,
             summary=(
-                f"{signal.pattern.value.replace('_', ' ').title()} "
-                f"({signal.signal_tier} tier)."
+                f"{signal.pattern.value.replace('_', ' ').title()} ({signal.signal_tier} tier)."
             ),
             evidence=signal.evidence,
         )
@@ -369,9 +362,7 @@ class DecisionPipeline:
             index_underlying
             and controls.instrument_mode in {InstrumentMode.AUTO, InstrumentMode.INDEX_OPTION}
         )
-        instrument_type = (
-            InstrumentMode.INDEX_OPTION if use_index else InstrumentMode.EQUITY_OPTION
-        )
+        instrument_type = InstrumentMode.INDEX_OPTION if use_index else InstrumentMode.EQUITY_OPTION
         underlying_symbol = index_underlying if use_index and index_underlying else signal_symbol
         option_style = "European" if use_index else "American"
         settlement = "cash" if use_index else "physical"
@@ -420,8 +411,8 @@ class DecisionPipeline:
             entry_rules=[
                 f"Regime confidence at least {controls.min_confidence:.0%}",
                 f"Swing signal: {swing.signal.value.replace('_', ' ')}",
-                "At least 3 of 6 deterministic council votes support the proposal",
-                "Live option-chain GEX must pass completeness and structure checks",
+                "Council quorum, support count, and weighted threshold must pass",
+                "Live GEX must pass for production; missing GEX halves exploration size",
                 "Sector rotation must not materially oppose the directional thesis",
                 f"Target expiration near {controls.target_dte} DTE",
                 "Bid/ask spread and open-interest liquidity checks pass",
@@ -461,21 +452,35 @@ class DecisionPipeline:
             reasons.append("Preview loss exceeds the account risk budget")
         if self.settings.market_data_mode.lower() == "alpaca":
             if microstructure.status != "live" or microstructure.data_quality < 0.6:
-                approved = False
-                reasons.append("Live GEX evidence is unavailable or below 60% data quality")
+                exploration_signal = bool(
+                    scanner_signal is not None and scanner_signal.signal_tier == "exploration"
+                )
+                if exploration_signal:
+                    max_allowed = min(max_allowed, self.settings.defensive_risk_cap_dollars)
+                    if strategy.max_loss_dollars > max_allowed:
+                        approved = False
+                        reasons.append(
+                            f"Missing live GEX limits exploration loss to ${max_allowed:,.0f}"
+                        )
+                    else:
+                        reasons.append(
+                            "Live GEX unavailable; exploration stays half-size and "
+                            "still requires live CLI quote-width and open-interest gates"
+                        )
+                else:
+                    approved = False
+                    reasons.append("Live GEX evidence is unavailable or below 60% data quality")
             elif microstructure.gamma_regime.value == "amplifying":
                 max_allowed = min(max_allowed, self.settings.defensive_risk_cap_dollars)
                 if strategy.max_loss_dollars > max_allowed:
                     approved = False
                     reasons.append(
-                        "Negative-gamma conditions cap maximum loss at "
-                        f"${max_allowed:,.0f}"
+                        f"Negative-gamma conditions cap maximum loss at ${max_allowed:,.0f}"
                     )
             elif (
                 microstructure.gamma_concentration is not None
                 and microstructure.gamma_concentration >= 0.6
-                and strategy.name
-                in {StrategyName.BULL_CALL_SPREAD, StrategyName.BEAR_PUT_SPREAD}
+                and strategy.name in {StrategyName.BULL_CALL_SPREAD, StrategyName.BEAR_PUT_SPREAD}
                 and swing.signal
                 not in {SwingSignal.BULLISH_BREAKOUT, SwingSignal.BEARISH_BREAKDOWN}
             ):
@@ -498,11 +503,7 @@ class DecisionPipeline:
                 if strategy.name == StrategyName.BEAR_PUT_SPREAD
                 else Direction.SIDEWAYS
             )
-            if (
-                not scanner_signal.actionable
-                or not scanner_signal.market_aligned
-                or scanner_signal.direction != proposal_direction
-            ):
+            if not scanner_signal.actionable or scanner_signal.direction != proposal_direction:
                 approved = False
                 reasons.append("Scanner evidence does not authorize this directional proposal")
             if regime.direction not in {Direction.SIDEWAYS, proposal_direction}:
@@ -518,9 +519,7 @@ class DecisionPipeline:
             strategy.instrument_type == InstrumentMode.INDEX_OPTION
             and strategy.name != StrategyName.NO_TRADE
         )
-        if (
-            index_candidate and not 21 <= controls.target_dte <= 45
-        ):
+        if index_candidate and not 21 <= controls.target_dte <= 45:
             approved = False
             reasons.append("Index swing positions require a 21–45 DTE target")
         if index_candidate and swing.signal not in {
