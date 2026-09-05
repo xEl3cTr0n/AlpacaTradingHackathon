@@ -78,7 +78,7 @@ export function Dashboard({
       <section className="platform-main">
         <header className="platform-topbar">
           <div className="mobile-brand"><PanelLeftClose size={18} aria-hidden="true" /> RegimeShift</div>
-          <div className="market-status"><span className="connection-dot" aria-hidden="true" /><div><strong>Agent online</strong><small>{initialPlatform.mode} telemetry</small></div></div>
+          <div className="market-status" role="status" aria-atomic="true"><span className={`connection-dot ${initialPlatform.automation.market_open ? "" : "waiting"}`} aria-hidden="true" /><div><strong>{initialPlatform.automation.market_open ? "Agent monitoring" : "Worker armed"}</strong><small>{initialPlatform.automation.market_open ? "Paper market open" : "Paper market closed"}</small></div></div>
           <div className="topbar-account">
             <div><span>Paper equity</span><strong>${initialPlatform.account.equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></div>
             <div><span>Today</span><strong className={accountPositive ? "positive" : "negative"}>{accountPositive ? "+" : ""}${initialPlatform.account.day_pnl.toFixed(2)}</strong></div>

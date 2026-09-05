@@ -1,4 +1,4 @@
-import { Activity, Bot, Braces, CheckCircle2, CircleDashed, Command, DatabaseZap, ShieldCheck, Workflow } from "lucide-react";
+import { Activity, Bot, Braces, CalendarClock, CheckCircle2, CircleDashed, Clock3, Command, DatabaseZap, Radar, ShieldCheck, Workflow } from "lucide-react";
 import type { DecisionSnapshot, PlatformSnapshot } from "@/lib/types";
 
 const integrationIcons = { "trading-api": DatabaseZap, mcp: Braces, cli: Command };
@@ -7,6 +7,12 @@ export function AgentOps({ platform, snapshot }: { platform: PlatformSnapshot; s
   return (
     <div className="view-stack">
       <header className="view-heading"><div><p className="eyebrow">Runtime transparency</p><h1>Agent operations</h1><p>See how the autonomous system uses Alpaca and reaches each decision.</p></div><span className="decision-chip approved"><Activity size={15} aria-hidden="true" /> Observability on</span></header>
+      <section className="automation-strip panel" aria-label="Paper automation status">
+        <article><span><Radar size={17} aria-hidden="true" /></span><div><small>Worker</small><strong>{platform.automation.market_open ? "Monitoring" : "Armed"}</strong><p>{platform.automation.worker}</p></div></article>
+        <article><span><Clock3 size={17} aria-hidden="true" /></span><div><small>Paper market</small><strong>{platform.automation.market_open ? "Open" : "Closed"}</strong><p>{platform.automation.market_open ? `Closes ${new Date(platform.automation.next_close).toLocaleString()}` : "No orders submitted while closed"}</p></div></article>
+        <article><span><CalendarClock size={17} aria-hidden="true" /></span><div><small>Next open</small><strong>{new Date(platform.automation.next_open).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</strong><p>{new Date(platform.automation.next_open).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p></div></article>
+        <article><span><Workflow size={17} aria-hidden="true" /></span><div><small>Scanner cadence</small><strong>Every {platform.automation.scan_interval_minutes} min</strong><p>Completed 15-minute bars</p></div></article>
+      </section>
       <section className="integration-grid">
         {platform.integrations.map((integration) => {
           const Icon = integrationIcons[integration.id as keyof typeof integrationIcons] ?? Workflow;

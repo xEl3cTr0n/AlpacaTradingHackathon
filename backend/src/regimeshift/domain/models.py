@@ -520,6 +520,16 @@ class ActivityEvent(BaseModel):
     status: str
 
 
+class PaperAutomationStatus(BaseModel):
+    status: str
+    market_open: bool
+    next_open: datetime
+    next_close: datetime
+    scan_interval_minutes: int = Field(default=5, ge=1)
+    worker: str
+    paper_only: bool = True
+
+
 class PlatformSnapshot(BaseModel):
     mode: str
     account: AccountSummary
@@ -528,4 +538,5 @@ class PlatformSnapshot(BaseModel):
     orders: list[OrderSummary]
     integrations: list[IntegrationStatus]
     activity: list[ActivityEvent]
+    automation: PaperAutomationStatus
     generated_at: datetime

@@ -9,6 +9,7 @@ from regimeshift.domain.models import (
     EquityPoint,
     IntegrationStatus,
     OrderSummary,
+    PaperAutomationStatus,
     PlatformSnapshot,
     PositionSummary,
 )
@@ -186,6 +187,14 @@ class DemoPlatformProvider:
             orders=orders,
             integrations=_integration_statuses(self.settings),
             activity=activity,
+            automation=PaperAutomationStatus(
+                status="demo",
+                market_open=True,
+                next_open=now,
+                next_close=now + timedelta(hours=6),
+                scan_interval_minutes=5,
+                worker="Demo replay",
+            ),
             generated_at=now,
         )
 
@@ -213,6 +222,7 @@ class AlpacaPlatformProvider:
         )
         positions = self.client.get_all_positions()
         orders = self.client.get_orders(GetOrdersRequest(limit=20, nested=True))
+        clock = self.client.get_clock()
         equity = float(account.equity or 0)
         last_equity = float(account.last_equity or equity)
         base_value = float(history.base_value or last_equity or 1)
@@ -281,6 +291,14 @@ class AlpacaPlatformProvider:
                     status="success",
                 )
             ],
+            automation=PaperAutomationStatus(
+                status="monitoring" if clock.is_open else "waiting_for_market",
+                market_open=bool(clock.is_open),
+                next_open=clock.next_open,
+                next_close=clock.next_close,
+                scan_interval_minutes=5,
+                worker="GitHub Actions + Alpaca CLI",
+            ),
             generated_at=now,
         )
 

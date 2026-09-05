@@ -27,3 +27,12 @@ def test_signal_client_order_id_is_stable_and_alpaca_safe() -> None:
     assert first.startswith("regimeshift-signal-")
     assert len(first) <= 48
     assert first != AlpacaCliAdapter.signal_client_order_id(signal_key.replace("AAPL", "MSFT"))
+
+
+def test_platform_snapshot_exposes_paper_automation_status() -> None:
+    snapshot = DemoPlatformProvider(Settings(market_data_mode="demo")).get_snapshot()
+
+    assert snapshot.automation.paper_only is True
+    assert snapshot.automation.scan_interval_minutes == 5
+    assert snapshot.automation.next_close > snapshot.automation.next_open
+    assert snapshot.automation.worker == "Demo replay"

@@ -382,5 +382,14 @@ export interface PlatformSnapshot {
     detail: string;
     status: string;
   }>;
+  automation: {
+    status: string;
+    market_open: boolean;
+    next_open: string;
+    next_close: string;
+    scan_interval_minutes: number;
+    worker: string;
+    paper_only: boolean;
+  };
   generated_at: string;
 }

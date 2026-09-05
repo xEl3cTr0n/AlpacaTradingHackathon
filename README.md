@@ -258,6 +258,11 @@ reward, 50% of maximum loss, seven DTE, or an opposing detected trend. Because
 the worker checks every 5 minutes, the loss exit is a trigger rather than a
 guaranteed fill price.
 
+The Agent Ops screen reads Alpaca's paper market clock and shows whether the
+worker is monitoring or armed for the next session, the next open/close, and the
+five-minute scan cadence. This status is separate from the live order tape so a
+closed market is never presented as an active trading session.
+
 Add `--execute` only when you intentionally want eligible signals submitted to
 Alpaca paper trading. The runner skips closed markets and persists a local,
 ignored signal key so the same daily crossover cannot be submitted twice.
