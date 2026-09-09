@@ -356,6 +356,23 @@ class LargeCapScanner:
             if direction == Direction.BEARISH
             else "no_trade"
         )
+        entry_checks = [
+            "Entry gate: higher-timeframe trend is sideways"
+            if direction == Direction.SIDEWAYS
+            else "Entry gate: no fresh 18 EMA cross aligned with the trend"
+            if not exact_cross
+            else "Entry gate: aligned 18 EMA cross confirmed",
+            (
+                f"Liquidity gate: {'passed' if liquidity_qualified else 'rejected'} "
+                f"(${average_dollar_volume:,.0f} average daily dollar volume; "
+                f"requires ${self.minimum_average_dollar_volume:,.0f})"
+            ),
+            (
+                "Conviction gate: "
+                f"{'passed' if conviction >= self.exploration_conviction else 'rejected'} "
+                f"({conviction:.1%}; requires {self.exploration_conviction:.1%})"
+            ),
+        ]
         return ScannerCandidate(
             rank=1,
             symbol=symbol,
@@ -385,5 +402,6 @@ class LargeCapScanner:
                 f"20-session relative strength vs SPY {relative_strength:+.2%}",
                 f"Volume is {volume_ratio:.2f}x its 20-session average",
                 "Option-chain liquidity is verified only after council approval",
+                *entry_checks,
             ],
         )

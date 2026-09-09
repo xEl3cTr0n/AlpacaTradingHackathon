@@ -294,13 +294,17 @@ class AlpacaCliAdapter:
         pending_entry_ids = {
             str(item.get("client_order_id", ""))
             for item in open_orders
-            if str(item.get("client_order_id", "")).startswith("regimeshift-signal-")
+            if str(item.get("client_order_id", "")).startswith(
+                ("regimeshift-signal-", "regimeshift-manual-")
+            )
         }
         pending_roots = {
             self._option_root(str((item.get("legs") or [{}])[0].get("symbol", "")))
             for item in open_orders
             if item.get("legs")
-            and str(item.get("client_order_id", "")).startswith("regimeshift-signal-")
+            and str(item.get("client_order_id", "")).startswith(
+                ("regimeshift-signal-", "regimeshift-manual-")
+            )
         }
         active_roots = {root for root in position_roots | pending_roots if root}
         if underlying in active_roots:
