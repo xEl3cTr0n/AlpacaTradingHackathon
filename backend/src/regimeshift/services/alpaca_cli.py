@@ -114,31 +114,6 @@ class AlpacaCliAdapter:
             key=lambda value: abs((datetime.fromisoformat(value).date() - today).days - target),
         )
         same_expiry = [contract for contract in contracts if contract["expiration_date"] == expiry]
-        long_contract = min(
-            same_expiry,
-            key=lambda contract: abs(float(contract["strike_price"]) - spot),
-        )
-        long_strike = float(long_contract["strike_price"])
-        short_candidates = [
-            contract
-            for contract in same_expiry
-            if (
-                float(contract["strike_price"]) > long_strike
-                if option_type == "call"
-                else float(contract["strike_price"]) < long_strike
-            )
-        ]
-        if not short_candidates:
-            raise ValueError(f"No protective short leg was available for {underlying}")
-        target_width = max(1.0, spot * 0.02)
-        target_short_strike = long_strike + (
-            target_width if option_type == "call" else -target_width
-        )
-        short_contract = min(
-            short_candidates,
-            key=lambda contract: abs(float(contract["strike_price"]) - target_short_strike),
-        )
-        short_strike = float(short_contract["strike_price"])
         chain = self._run(
             [
                 "data",
@@ -149,17 +124,27 @@ class AlpacaCliAdapter:
                 "--expiration-date",
                 expiry,
                 "--strike-price-gte",
-                f"{min(long_strike, short_strike):.2f}",
+                f"{spot * 0.92:.2f}",
                 "--strike-price-lte",
-                f"{max(long_strike, short_strike):.2f}",
+                f"{spot * 1.08:.2f}",
                 "--type",
                 option_type,
                 "--limit",
-                "100",
+                "1000",
                 "--quiet",
             ]
         )
         snapshots = chain.get("snapshots", {})
+        long_contract, short_contract = self.select_spread_contracts(
+            same_expiry,
+            snapshots,
+            spot=spot,
+            option_type=option_type,
+            risk_cap=min(snapshot.risk.max_allowed_loss, self.settings.max_position_loss_dollars),
+            require_open_interest=underlying != "XSP",
+        )
+        long_strike = float(long_contract["strike_price"])
+        short_strike = float(short_contract["strike_price"])
         long_quote = self._quote(snapshots, long_contract["symbol"])
         short_quote = self._quote(snapshots, short_contract["symbol"])
         debit = round(max(0.01, long_quote["ask"] - short_quote["bid"]), 2)
@@ -224,7 +209,18 @@ class AlpacaCliAdapter:
         if execute and not self.settings.enable_paper_orders:
             raise ValueError("ENABLE_PAPER_ORDERS must be true for CLI submission")
         if execute and not allowed:
-            raise ValueError("Deterministic execution gates rejected the order")
+            reasons = []
+            if not snapshot.risk.approved:
+                reasons.append("Risk Agent rejected")
+            if not snapshot.council.approved:
+                reasons.append("council rejected")
+            if not plan["paper_only"]:
+                reasons.append("paper-only restriction")
+            if not plan["liquidity_passed"]:
+                reasons.append("quote width, size or open-interest gate failed")
+            if plan["maximum_loss"] > snapshot.risk.max_allowed_loss:
+                reasons.append("quoted debit exceeds Risk Agent budget")
+            raise ValueError("Deterministic execution gates rejected: " + "; ".join(reasons))
         capacity = None
         if execute:
             capacity = self.verify_execution_capacity(plan["underlying_symbol"])
@@ -421,6 +417,57 @@ class AlpacaCliAdapter:
             "paper_only": True,
             "order": order,
         }
+
+    @classmethod
+    def select_spread_contracts(
+        cls,
+        contracts: list[dict[str, Any]],
+        snapshots: dict[str, Any],
+        *,
+        spot: float,
+        option_type: str,
+        risk_cap: float,
+        require_open_interest: bool = True,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Prefer near-ATM pairs that satisfy existing quote, OI and debit gates."""
+        liquid = []
+        for contract in contracts:
+            interest = cls._open_interest(contract)
+            if require_open_interest and (interest is None or interest < 50):
+                continue
+            try:
+                quote = cls._quote(snapshots, contract["symbol"])
+            except (ValueError, TypeError):
+                continue
+            if cls._liquid(quote):
+                liquid.append((contract, quote))
+        if len(liquid) < 2:
+            raise ValueError(
+                "Fewer than two contracts pass quote-width, size and open-interest gates"
+            )
+        liquid.sort(key=lambda item: abs(float(item[0]["strike_price"]) - spot))
+        target_width = max(1.0, spot * 0.02)
+        pairs = []
+        for long_contract, long_quote in liquid[:10]:
+            long_strike = float(long_contract["strike_price"])
+            for short_contract, short_quote in liquid:
+                if long_contract["expiration_date"] != short_contract["expiration_date"]:
+                    continue
+                short_strike = float(short_contract["strike_price"])
+                signed_width = (short_strike - long_strike) * (1 if option_type == "call" else -1)
+                if not 0 < signed_width <= target_width * 2:
+                    continue
+                debit = round(long_quote["ask"] - short_quote["bid"], 2)
+                if not 0 < debit < signed_width or round(debit * 100, 2) > risk_cap:
+                    continue
+                rank = (abs(long_strike - spot), abs(signed_width - target_width), debit)
+                pairs.append((rank, long_contract, short_contract))
+        if not pairs:
+            raise ValueError(
+                f"No liquid directional debit spread fits the ${risk_cap:,.0f} Risk Agent budget"
+            )
+        _, long_contract, short_contract = min(pairs, key=lambda item: item[0])
+        return long_contract, short_contract
 
     @staticmethod
     def _quote(snapshots: dict[str, Any], symbol: str) -> dict[str, float]:
