@@ -34,6 +34,47 @@ export interface BacktestReport {
   trades?: BacktestTrade[];
 }
 
+export const potentialMoveCalibration = {
+  name: "Five-session potential-move range",
+  generatedAt: "2026-09-11T09:48:16.271311+00:00",
+  source: "Alpaca IEX fully adjusted daily bars",
+  period: "Sep 13, 2021 – Sep 10, 2026",
+  symbols: 25,
+  bars: 1254,
+  splitDate: "2025-03-12",
+  methodology: "Walk-forward non-overlapping five-session windows; every estimate uses only bars available at that close; 70/30 chronological split.",
+  calibrationGatePassed: true,
+  executionEligible: false,
+  train: {
+    observations: 4089,
+    terminalCoverage: 0.8202,
+    pathCoverage: 0.6694,
+    meanExpectedMove: 0.0581,
+    meanRealizedMove: 0.0342,
+    medianRealizedToExpected: 0.48,
+  },
+  holdout: {
+    observations: 1861,
+    terminalCoverage: 0.8442,
+    pathCoverage: 0.6883,
+    meanExpectedMove: 0.0609,
+    meanRealizedMove: 0.0346,
+    medianRealizedToExpected: 0.462,
+  },
+  parameters: [
+    ["Range", "max of ATR(14) and realized volatility"],
+    ["Horizon", "5 sessions"],
+    ["Sampling", "Non-overlapping windows"],
+    ["Holdout", "30% chronological"],
+  ] as Array<[string, string]>,
+  limitations: [
+    "Validates an underlying statistical range, not an options-implied move.",
+    "Cross-sectional observations share market regimes and are not independent.",
+    "Corporate events are not separated from ordinary sessions.",
+    "Display-only: this result cannot authorize paper execution.",
+  ],
+};
+
 export const backtestReports: BacktestReport[] = [
   {
     id: "swing",

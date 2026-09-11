@@ -52,7 +52,13 @@ def build_potential_move_thesis(
     estimator_agreement = smaller / larger if larger else 1.0
     move_confidence = min(1.0, 0.55 + 0.30 * estimator_agreement + 0.15 * min(1, len(points) / 120))
 
-    direction_sign = 1 if direction == Direction.BULLISH else -1 if direction == Direction.BEARISH else 0
+    direction_sign = (
+        1
+        if direction == Direction.BULLISH
+        else -1
+        if direction == Direction.BEARISH
+        else 0
+    )
     direction_score = direction_sign * conviction * 100
     lower_bound = max(0.01, spot - expected_move)
     upper_bound = spot + expected_move
@@ -108,7 +114,10 @@ def build_potential_move_thesis(
         trigger=trigger,
         target=target,
         invalidation=invalidation,
-        basis="Completed Alpaca daily bars: max of ATR(14) and realized-volatility range; not an options-implied move",
+        basis=(
+            "Completed Alpaca daily bars: max of ATR(14) and realized-volatility "
+            "range; not an options-implied move"
+        ),
         supporting_evidence=supporting,
         conflicting_evidence=conflicting,
     )

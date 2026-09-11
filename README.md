@@ -288,18 +288,30 @@ a 66.7% win rate, +11.7% compounded underlying proxy return, and -27.0% maximum
 drawdown after 20 bps friction. See `docs/scanner-backtest-results.json`. This
 does not model historical option fills and is not predictive.
 
+Reproduce the potential-move range calibration with:
+
+```bash
+backend/.venv/bin/python scripts/backtest_potential_move.py --days 1825 --output docs/potential-move-backtest-results.json
+```
+
+The latest 30% chronological holdout contains 1,861 non-overlapping windows.
+The displayed range contained the five-session closing price 84.42% of the time
+and the entire five-session high/low path 68.83% of the time. The calibration
+gate passed, but the result remains display-only and cannot authorize execution.
+
 Reproduce the intraday validation with:
 
 ```bash
 backend/.venv/bin/python scripts/backtest_intraday_scanner.py --days 120
 ```
 
-The current 120-day holdout did **not** pass after modeled friction, so both
-intraday execution tiers remain locked while the scanner and council run in
-preview mode. See `docs/intraday-scanner-backtest-results.json`. This fail-closed
-result is intentional; changing thresholds requires a new chronological test.
-The previously validated daily production policy can still submit paper trades
-when `ENABLE_PAPER_ORDERS=true`.
+The current 120-day holdout rejected the 60%+ production tier after modeled
+friction. The 55–60% exploration tier passed its separate holdout and is
+eligible only for the $500 risk cap when its explicit environment flag and all
+live gates pass. See `docs/intraday-scanner-backtest-results.json`. This
+split fail-closed result is intentional; changing thresholds requires a new
+chronological test. The previously validated daily production policy can still
+submit paper trades when `ENABLE_PAPER_ORDERS=true`.
 
 ### Backtest gate
 

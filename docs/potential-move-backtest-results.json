@@ -1,0 +1,49 @@
+{
+  "methodology": "Walk-forward non-overlapping five-session windows; estimate uses only bars available at each close; 70/30 chronological train/holdout split",
+  "parameters": {
+    "horizon_sessions": 5,
+    "warmup_sessions": 60,
+    "range_estimator": "max(ATR(14) \u00d7 sqrt(5), daily realized volatility \u00d7 sqrt(5))"
+  },
+  "split_date": "2025-03-12",
+  "train": {
+    "observations": 4089,
+    "terminal_coverage": 0.8202,
+    "path_coverage": 0.6694,
+    "mean_expected_move_pct": 0.0581,
+    "mean_realized_move_pct": 0.0342,
+    "median_realized_to_expected": 0.48,
+    "upper_breach_rate": 0.1709,
+    "lower_breach_rate": 0.1619,
+    "range_rmse_pct": 0.0437
+  },
+  "holdout": {
+    "observations": 1861,
+    "terminal_coverage": 0.8442,
+    "path_coverage": 0.6883,
+    "mean_expected_move_pct": 0.0609,
+    "mean_realized_move_pct": 0.0346,
+    "median_realized_to_expected": 0.462,
+    "upper_breach_rate": 0.1682,
+    "lower_breach_rate": 0.1451,
+    "range_rmse_pct": 0.0461
+  },
+  "calibration_gate_passed": true,
+  "execution_eligible": false,
+  "limitations": [
+    "Validates an underlying statistical range, not an options-implied move.",
+    "Cross-sectional observations share market regimes and are not independent.",
+    "Corporate events are not separated from ordinary sessions.",
+    "The range remains display-only; it cannot authorize paper execution.",
+    "Past calibration does not predict future coverage."
+  ],
+  "generated_at": "2026-09-11T09:48:16.271311+00:00",
+  "source": "Alpaca IEX fully adjusted daily bars",
+  "history": {
+    "calendar_days_requested": 1825,
+    "symbols": 25,
+    "benchmark_bars": 1254,
+    "start": "2021-09-13T04:00:00+00:00",
+    "end": "2026-09-10T04:00:00+00:00"
+  }
+}
