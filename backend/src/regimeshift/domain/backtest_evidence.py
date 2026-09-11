@@ -84,9 +84,9 @@ def load_scanner_backtest_evidence(root: Path | None = None) -> ScannerExecution
             daily_report = DAILY_SCANNER_REPORT
             source = "Packaged Alpaca chronological backtest reports"
         else:
-            intraday_text = (
-                root / "docs" / "intraday-scanner-backtest-results.json"
-            ).read_text(encoding="utf-8")
+            intraday_text = (root / "docs" / "intraday-scanner-backtest-results.json").read_text(
+                encoding="utf-8"
+            )
             daily_text = (root / "docs" / "scanner-backtest-results.json").read_text(
                 encoding="utf-8"
             )
@@ -107,3 +107,35 @@ def load_scanner_backtest_evidence(root: Path | None = None) -> ScannerExecution
             daily_production_backtest_passed=False,
             details=[f"Fail closed: {type(error).__name__}"],
         )
+
+
+def scanner_tier_execution_allowed(
+    gates: ScannerExecutionGates,
+    *,
+    timeframe: str,
+    signal_tier: str,
+    exploration_enabled: bool,
+) -> tuple[bool, str]:
+    """Resolve one scanner tier against frozen evidence and runtime switches."""
+    if not gates.evidence_valid:
+        return False, "Backtest evidence is invalid or unavailable"
+    if signal_tier == "watch":
+        return False, "Watch signals are never execution eligible"
+    if timeframe == "1Day":
+        if signal_tier != "production":
+            return False, "Daily exploration has no validated execution policy"
+        if not gates.daily_production_backtest_passed:
+            return False, "Daily production holdout gate is locked"
+        return True, "Daily production holdout gate passed"
+    if timeframe == "15Min":
+        if signal_tier == "production":
+            if not gates.intraday_production_backtest_passed:
+                return False, "Intraday production holdout gate is locked"
+            return True, "Intraday production holdout gate passed"
+        if signal_tier == "exploration":
+            if not gates.intraday_exploration_backtest_passed:
+                return False, "Intraday exploration holdout gate is locked"
+            if not exploration_enabled:
+                return False, "Intraday exploration runtime switch is closed"
+            return True, "Intraday exploration holdout and runtime gates passed"
+    return False, f"Unsupported scanner timeframe or tier: {timeframe}/{signal_tier}"

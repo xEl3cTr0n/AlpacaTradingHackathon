@@ -2,6 +2,7 @@ from pathlib import Path
 
 from regimeshift.domain.backtest_evidence import (
     load_scanner_backtest_evidence,
+    scanner_tier_execution_allowed,
     validate_scanner_backtest_evidence,
 )
 
@@ -65,6 +66,35 @@ def test_packaged_deployment_evidence_is_valid() -> None:
     assert packaged.intraday_exploration_backtest_passed is True
     assert packaged.daily_production_backtest_passed is True
     assert packaged.source.startswith("Packaged")
-    assert packaged.model_dump(exclude={"source"}) == committed.model_dump(
-        exclude={"source"}
-    )
+    assert packaged.model_dump(exclude={"source"}) == committed.model_dump(exclude={"source"})
+
+
+def test_scanner_tier_gate_is_fail_closed_and_timeframe_specific() -> None:
+    gates = load_scanner_backtest_evidence()
+
+    assert scanner_tier_execution_allowed(
+        gates,
+        timeframe="15Min",
+        signal_tier="production",
+        exploration_enabled=True,
+    ) == (False, "Intraday production holdout gate is locked")
+    assert scanner_tier_execution_allowed(
+        gates,
+        timeframe="15Min",
+        signal_tier="exploration",
+        exploration_enabled=True,
+    )[0]
+    assert scanner_tier_execution_allowed(
+        gates,
+        timeframe="1Day",
+        signal_tier="production",
+        exploration_enabled=False,
+    )[0]
+
+    invalid = gates.model_copy(update={"evidence_valid": False})
+    assert not scanner_tier_execution_allowed(
+        invalid,
+        timeframe="1Day",
+        signal_tier="production",
+        exploration_enabled=True,
+    )[0]

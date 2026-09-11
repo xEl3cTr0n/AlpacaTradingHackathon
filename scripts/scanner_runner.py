@@ -16,6 +16,10 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 from gpt_mcp_research import research as gpt_mcp_research
 from regimeshift.config import Settings
+from regimeshift.domain.backtest_evidence import (
+    load_scanner_backtest_evidence,
+    scanner_tier_execution_allowed,
+)
 from regimeshift.domain.models import (
     AgentVerdict,
     AnalysisControls,
@@ -59,6 +63,8 @@ def run_cycle(
             source="Alpaca IEX fully adjusted daily bars",
             timeframe="1Day",
         )
+    execution_gates = load_scanner_backtest_evidence(ROOT)
+    scan = scan.model_copy(update={"execution_gates": execution_gates})
     summary: dict[str, object] = {
         "generated_at": datetime.now(UTC).isoformat(),
         "paper_only": True,
@@ -140,6 +146,14 @@ def run_cycle(
             "risk_cap_dollars": snapshot.risk.max_allowed_loss,
             "strategy": snapshot.strategy.display_name,
         }
+        tier_allowed, tier_reason = scanner_tier_execution_allowed(
+            execution_gates,
+            timeframe=scan.timeframe,
+            signal_tier=candidate.signal_tier,
+            exploration_enabled=settings.enable_exploration_orders,
+        )
+        evaluation["backtest_gate_open"] = tier_allowed
+        evaluation["backtest_gate_reason"] = tier_reason
         summary["evaluations"].append(evaluation)
         if not snapshot.council.approved or not snapshot.risk.approved:
             continue
@@ -152,16 +166,10 @@ def run_cycle(
             evaluation["result"] = "duplicate_blocked"
             continue
         verification = verification or cli.verify()
-        candidate_execute = execute and (
-            (timeframe == "daily" and not exploration)
-            or (
-                timeframe == "intraday"
-                and exploration
-                and settings.enable_exploration_orders
-            )
-        )
+        candidate_execute = execute and tier_allowed
         if execute and not candidate_execute:
             evaluation["result"] = "tier_gate_closed"
+            evaluation["reason"] = tier_reason
             continue
         if candidate_execute and not bool(verification["clock"].get("is_open")):
             summary["cli"] = verification

@@ -87,6 +87,19 @@ export async function fetchOptionsThesis(symbol: string): Promise<OptionsThesisS
   return thesis;
 }
 
+export async function evaluateScannerCandidate(symbol: string): Promise<DecisionSnapshot> {
+  const response = await fetch(
+    `${apiUrl}/api/v1/scanner/evaluate?symbol=${encodeURIComponent(symbol)}`,
+    {
+      cache: "no-store",
+      signal: AbortSignal.timeout(45_000),
+    },
+  );
+  const snapshot = await responseJson<DecisionSnapshot>(response, "Scanner council API");
+  requireLiveSource("Scanner council API", snapshot.market.source);
+  return snapshot;
+}
+
 export async function previewManualTrade(
   request: ManualTradeRequest,
 ): Promise<ManualTradePreview> {

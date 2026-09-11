@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useState, useTransition } from "react";
 import type { CSSProperties } from "react";
-import { loadOptionsThesis, refreshScanner, runAnalysis } from "@/app/actions";
+import { loadOptionsThesis, refreshScanner, runScannerAnalysis } from "@/app/actions";
 import type { DecisionSnapshot, OptionsThesisSnapshot, ScannerCandidate, ScannerSnapshot } from "@/lib/types";
 
 function patternLabel(pattern: ScannerCandidate["pattern"]): string {
@@ -94,14 +94,7 @@ export function OpportunityScanner({
     setActiveSymbol(candidate.symbol);
     startTransition(async () => {
       try {
-        const snapshot = await runAnalysis(candidate.symbol, {
-          strategy_mode: "adaptive",
-          instrument_mode: "equity_option",
-          max_risk_pct: 0.01,
-          min_confidence: Math.min(0.9, Math.max(0.55, candidate.conviction)),
-          target_dte: 30,
-          max_loss_cap_dollars: candidate.signal_tier === "exploration" ? 500 : null,
-        });
+        const snapshot = await runScannerAnalysis(candidate.symbol);
         onSnapshot(snapshot);
       } catch (analysisError) {
         setError(

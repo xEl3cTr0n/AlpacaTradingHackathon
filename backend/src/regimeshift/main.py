@@ -5,7 +5,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from regimeshift.config import Settings, get_settings
-from regimeshift.domain.backtest_evidence import load_scanner_backtest_evidence
+from regimeshift.domain.backtest_evidence import (
+    load_scanner_backtest_evidence,
+    scanner_tier_execution_allowed,
+)
 from regimeshift.domain.models import (
     AnalysisControls,
     AnalyzeRequest,
@@ -19,13 +22,14 @@ from regimeshift.domain.models import (
     OptionsThesisSnapshot,
     PlatformSnapshot,
     ScannerSnapshot,
+    ToolEvidence,
 )
 from regimeshift.domain.options_thesis import build_options_thesis
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.live_tape import get_live_tick
 from regimeshift.services.manual_trading import ManualPaperTrader
-from regimeshift.services.market_data import build_market_data_provider
+from regimeshift.services.market_data import MarketDataProvider, build_market_data_provider
 from regimeshift.services.options_data import build_options_provider
 from regimeshift.services.platform import build_platform_provider
 
@@ -207,6 +211,103 @@ def scanner_options_thesis(
         ) from error
 
 
+def _build_scanner_snapshot(
+    settings: Settings,
+    provider: MarketDataProvider,
+    *,
+    limit: int,
+) -> ScannerSnapshot:
+    symbols = ["SPY", *LARGE_CAP_UNIVERSE]
+    histories = provider.get_intraday_history(symbols, days=10, bar_minutes=15)
+    liquidity_histories = provider.get_price_history(symbols, days=120)
+    source = (
+        "Alpaca IEX fully adjusted 15-minute bars"
+        if settings.market_data_mode.lower() == "alpaca"
+        else "deterministic 15-minute demo tape"
+    )
+    snapshot = LargeCapScanner().scan(
+        histories,
+        limit=limit,
+        source=source,
+        timeframe="15Min",
+        liquidity_histories=liquidity_histories,
+        annualization_periods=252 * 26,
+        evaluation_time=datetime.now(UTC),
+    )
+    return snapshot.model_copy(update={"execution_gates": load_scanner_backtest_evidence()})
+
+
+@app.get("/api/v1/scanner/evaluate", response_model=DecisionSnapshot)
+def evaluate_scanner_candidate(
+    settings: SettingsDependency,
+    symbol: str = Query(min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
+) -> DecisionSnapshot:
+    """Recompute a scanner signal server-side and run the read-only council."""
+    normalized = symbol.upper()
+    if normalized not in LARGE_CAP_UNIVERSE:
+        raise HTTPException(status_code=422, detail="Symbol is outside the scanner universe")
+    try:
+        provider = build_market_data_provider(settings)
+        scanner_snapshot = _build_scanner_snapshot(
+            settings, provider, limit=len(LARGE_CAP_UNIVERSE)
+        )
+        candidate = next(
+            (item for item in scanner_snapshot.candidates if item.symbol == normalized),
+            None,
+        )
+        if candidate is None:
+            raise ValueError(f"No current scanner evidence is available for {normalized}")
+        if not candidate.actionable:
+            raise ValueError(f"{normalized} is watch-only; a fresh qualified crossover is required")
+        controls = AnalysisControls(
+            instrument_mode="equity_option",
+            min_confidence=max(0.55, candidate.conviction),
+            target_dte=30,
+            max_loss_cap_dollars=(
+                candidate.risk_cap_dollars if candidate.signal_tier == "exploration" else None
+            ),
+        )
+        decision = DecisionPipeline(settings, provider).analyze(
+            normalized,
+            controls,
+            scanner_signal=candidate,
+        )
+        execution_gates = scanner_snapshot.execution_gates
+        if execution_gates is None:
+            raise ValueError("Scanner backtest evidence is unavailable")
+        tier_allowed, tier_reason = scanner_tier_execution_allowed(
+            execution_gates,
+            timeframe=scanner_snapshot.timeframe,
+            signal_tier=candidate.signal_tier,
+            exploration_enabled=settings.enable_exploration_orders,
+        )
+        gate_evidence = ToolEvidence(
+            provider="RegimeShift evidence registry",
+            capability="scanner tier authorization",
+            status="passed" if tier_allowed else "locked",
+            summary=tier_reason,
+        )
+        updates: dict[str, object] = {"tool_evidence": [*decision.tool_evidence, gate_evidence]}
+        if not tier_allowed:
+            updates["strategy"] = decision.strategy.model_copy(update={"status": "backtest locked"})
+            updates["risk"] = decision.risk.model_copy(
+                update={
+                    "approved": False,
+                    "reasons": [
+                        *decision.risk.reasons,
+                        f"Scanner execution gate: {tier_reason}",
+                    ],
+                }
+            )
+        return decision.model_copy(update=updates)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail=f"Scanner evaluation failed: {error}"
+        ) from error
+
+
 @app.post("/api/v1/manual-trades/preview", response_model=ManualTradePreview)
 def preview_manual_trade(
     request: ManualTradeRequest, settings: SettingsDependency
@@ -245,26 +346,7 @@ def scanner(
     """Rank the liquid large-cap universe without placing an order."""
     try:
         provider = build_market_data_provider(settings)
-        symbols = ["SPY", *LARGE_CAP_UNIVERSE]
-        histories = provider.get_intraday_history(symbols, days=10, bar_minutes=15)
-        liquidity_histories = provider.get_price_history(symbols, days=120)
-        source = (
-            "Alpaca IEX fully adjusted 15-minute bars"
-            if settings.market_data_mode.lower() == "alpaca"
-            else "deterministic 15-minute demo tape"
-        )
-        snapshot = LargeCapScanner().scan(
-            histories,
-            limit=limit,
-            source=source,
-            timeframe="15Min",
-            liquidity_histories=liquidity_histories,
-            annualization_periods=252 * 26,
-            evaluation_time=datetime.now(UTC),
-        )
-        return snapshot.model_copy(
-            update={"execution_gates": load_scanner_backtest_evidence()}
-        )
+        return _build_scanner_snapshot(settings, provider, limit=limit)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:

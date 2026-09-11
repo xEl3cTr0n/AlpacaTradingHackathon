@@ -12,6 +12,7 @@ MarketDataProvider
   -> PotentialMoveBacktester (non-overlapping 5-session chronological calibration)
   -> On-demand OptionsThesis (near-ATM IV / straddle context + GEX; read-only)
   -> Shared BacktestEvidence validator (dashboard + scheduled-worker fail-closed gates)
+  -> Server-recomputed ScannerEvaluation (client signals are never trusted)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
   -> BottomUpQuad (security trend + ETF breadth)
   -> Alpaca option chain + contract OI -> GEX / GMC microstructure evidence
@@ -71,6 +72,13 @@ the runner's explicit `--execute` flag and all of these conditions:
    a 50-contract open-interest floor pass.
 6. Quoted maximum loss is inside the account risk budget.
 7. `ALPACA_LIVE_TRADE=false` is injected by code and cannot be overridden.
+
+The dashboard scanner council route is analysis-only. It rebuilds the current
+candidate from Alpaca bars on the server, passes that exact structured signal to
+the same pipeline used by the worker, and applies the same frozen tier gate. A
+locked tier forces final authorization false and records the reason. The CLI
+runner independently loads the gate as well; GitHub workflow conditionals are an
+additional lock, not the sole enforcement point.
 
 Live GEX uses the supplied paper's explicit convention (+calls, -puts) over a
 bounded 0–45 DTE, 85–115% moneyness chain. It joins Alpaca snapshot Greeks to

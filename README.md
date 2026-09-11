@@ -244,7 +244,11 @@ Alpaca options snapshots.
 Every ranked row has a keyboard-accessible **Inspect** action, including
 watch-only rows. Selecting a row updates its statistical thesis and allows an
 on-demand options read. The separate council action remains disabled unless the
-scanner's deterministic entry gates pass.
+scanner's deterministic entry gates pass. **Run council** calls the dedicated
+`/api/v1/scanner/evaluate` endpoint, which recomputes the signal from current
+Alpaca bars server-side before attaching it to the voting pipeline. Client data
+cannot forge scanner authorization. The response also applies the frozen
+timeframe/tier backtest gate and exposes its reason as structured tool evidence.
 
 Run one scan and optional CLI dry-run:
 
@@ -342,6 +346,8 @@ The Scanner API and `verify_backtest_gate.py` share one typed evidence validator
 The dashboard therefore shows the same production/exploration holdout state used
 by the GitHub paper worker. A changed scanner parameter, universe, malformed
 report, or missing report marks the evidence invalid and locks every tier.
+`scanner_runner.py` also enforces that validator internally, so a local
+`--execute` invocation cannot bypass it even when launched outside GitHub Actions.
 
 ### Backtest gate
 
