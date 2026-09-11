@@ -2,6 +2,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from regimeshift.domain.frozen_backtest_evidence import (
+    DAILY_SCANNER_REPORT,
+    INTRADAY_SCANNER_REPORT,
+)
 from regimeshift.domain.models import ScannerExecutionGates
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.domain.scanner_backtest import IntradayScannerBacktester
@@ -73,16 +77,26 @@ def validate_scanner_backtest_evidence(
     )
 
 
-def load_scanner_backtest_evidence(root: Path) -> ScannerExecutionGates:
-    intraday_path = root / "docs" / "intraday-scanner-backtest-results.json"
-    daily_path = root / "docs" / "scanner-backtest-results.json"
+def load_scanner_backtest_evidence(root: Path | None = None) -> ScannerExecutionGates:
     try:
-        intraday_report = json.loads(intraday_path.read_text(encoding="utf-8"))
-        daily_report = json.loads(daily_path.read_text(encoding="utf-8"))
+        if root is None:
+            intraday_report = INTRADAY_SCANNER_REPORT
+            daily_report = DAILY_SCANNER_REPORT
+            source = "Packaged Alpaca chronological backtest reports"
+        else:
+            intraday_text = (
+                root / "docs" / "intraday-scanner-backtest-results.json"
+            ).read_text(encoding="utf-8")
+            daily_text = (root / "docs" / "scanner-backtest-results.json").read_text(
+                encoding="utf-8"
+            )
+            intraday_report = json.loads(intraday_text)
+            daily_report = json.loads(daily_text)
+            source = "Committed Alpaca chronological backtest reports"
         return validate_scanner_backtest_evidence(
             intraday_report,
             daily_report,
-            source="Committed Alpaca chronological backtest reports",
+            source=source,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         return ScannerExecutionGates(

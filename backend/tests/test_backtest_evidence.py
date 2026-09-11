@@ -1,4 +1,9 @@
-from regimeshift.domain.backtest_evidence import validate_scanner_backtest_evidence
+from pathlib import Path
+
+from regimeshift.domain.backtest_evidence import (
+    load_scanner_backtest_evidence,
+    validate_scanner_backtest_evidence,
+)
 
 
 def _reports() -> tuple[dict[str, object], dict[str, object]]:
@@ -48,3 +53,18 @@ def test_policy_change_invalidates_every_execution_gate() -> None:
     assert gates.intraday_exploration_backtest_passed is False
     assert gates.daily_production_backtest_passed is False
     assert "expected 0.55" in gates.details[0]
+
+
+def test_packaged_deployment_evidence_is_valid() -> None:
+    packaged = load_scanner_backtest_evidence()
+    repository_root = Path(__file__).resolve().parents[2]
+    committed = load_scanner_backtest_evidence(repository_root)
+
+    assert packaged.evidence_valid is True
+    assert packaged.intraday_production_backtest_passed is False
+    assert packaged.intraday_exploration_backtest_passed is True
+    assert packaged.daily_production_backtest_passed is True
+    assert packaged.source.startswith("Packaged")
+    assert packaged.model_dump(exclude={"source"}) == committed.model_dump(
+        exclude={"source"}
+    )

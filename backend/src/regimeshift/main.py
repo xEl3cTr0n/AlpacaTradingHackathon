@@ -1,5 +1,4 @@
 from datetime import UTC, date, datetime
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -42,9 +41,6 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Operator-Token"],
 )
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-
 
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 
@@ -266,7 +262,7 @@ def scanner(
             annualization_periods=252 * 26,
         )
         return snapshot.model_copy(
-            update={"execution_gates": load_scanner_backtest_evidence(REPOSITORY_ROOT)}
+            update={"execution_gates": load_scanner_backtest_evidence()}
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
