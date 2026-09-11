@@ -1,5 +1,5 @@
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta
 from statistics import mean, pstdev
 
 from regimeshift.domain.models import (
@@ -94,10 +94,14 @@ class LargeCapScanner:
         timeframe: str = "1Day",
         liquidity_histories: dict[str, list[PricePoint]] | None = None,
         annualization_periods: int = 252,
+        evaluation_time: datetime | None = None,
     ) -> ScannerSnapshot:
         benchmark = histories.get(self.benchmark_symbol, [])
         if len(benchmark) < 60:
             raise ValueError("Scanner requires at least 60 SPY sessions")
+        effective_evaluation_time = evaluation_time or max(
+            point.timestamp for point in benchmark
+        )
 
         candidates: list[ScannerCandidate] = []
         for symbol, name in LARGE_CAP_UNIVERSE.items():
@@ -128,8 +132,7 @@ class LargeCapScanner:
                 timeframe == "15Min"
                 and candidate is not None
                 and candidate.actionable
-                and max(point.timestamp for point in benchmark) - candidate.as_of
-                > timedelta(minutes=90)
+                and effective_evaluation_time - candidate.as_of > timedelta(minutes=90)
             ):
                 candidate = candidate.model_copy(
                     update={
@@ -138,7 +141,10 @@ class LargeCapScanner:
                         "risk_cap_dollars": 0.0,
                         "evidence": [
                             *candidate.evidence,
-                            "Signal is older than 90 minutes and cannot authorize a new entry",
+                            (
+                                "Signal is older than 90 minutes at evaluation time and "
+                                "cannot authorize a new entry"
+                            ),
                         ],
                     }
                 )

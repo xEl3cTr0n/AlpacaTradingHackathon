@@ -219,7 +219,9 @@ price crosses the intraday 18 EMA, its prior-session daily 18/50 trend agrees,
 20-session dollar volume exceeds $100M, and composite
 conviction is at least 55%. Signals at 60%+ are production candidates; the
 55–60% exploration tier has a deterministic $500 half-size maximum-loss cap and a
-separate execution lock. Crosses older than 90 minutes become watch-only. SPY
+separate execution lock. Live runs compare every cross with the current UTC
+evaluation time; crosses older than 90 minutes become watch-only even when
+Alpaca has not published a new session bar yet. SPY
 and sector context remain council votes. The CLI then checks bid/ask width and at least 50 open
 contracts on both equity-option legs.
 

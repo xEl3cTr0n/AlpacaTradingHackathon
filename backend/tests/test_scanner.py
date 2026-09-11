@@ -88,3 +88,26 @@ def test_intraday_scanner_downgrades_stale_cross(monkeypatch) -> None:
     assert snapshot.candidates[0].signal_tier == "watch"
     assert snapshot.candidates[0].risk_cap_dollars == 0
     assert "older than 90 minutes" in snapshot.candidates[0].evidence[-1]
+
+
+def test_live_evaluation_time_rejects_previous_session_cross(monkeypatch) -> None:
+    benchmark = _points([400 + index * 0.5 for index in range(80)], volume=5_000_000)
+    closes = [100 + index * 0.8 for index in range(80)]
+    closes[-2] = 145
+    closes[-1] = 180
+    scanner = LargeCapScanner()
+    candidate = scanner.score(
+        "AAPL", "Apple", _points(closes, volume=2_000_000), benchmark, 79
+    )
+    assert candidate is not None and candidate.actionable
+    monkeypatch.setattr(scanner, "score", lambda *args, **kwargs: candidate)
+
+    snapshot = scanner.scan(
+        {"SPY": benchmark, "AAPL": _points(closes, volume=2_000_000)},
+        timeframe="15Min",
+        evaluation_time=candidate.as_of + timedelta(hours=14),
+    )
+
+    assert snapshot.actionable_count == 0
+    assert snapshot.candidates[0].signal_tier == "watch"
+    assert "evaluation time" in snapshot.candidates[0].evidence[-1]

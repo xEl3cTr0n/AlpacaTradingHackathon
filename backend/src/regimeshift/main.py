@@ -260,6 +260,7 @@ def scanner(
             timeframe="15Min",
             liquidity_histories=liquidity_histories,
             annualization_periods=252 * 26,
+            evaluation_time=datetime.now(UTC),
         )
         return snapshot.model_copy(
             update={"execution_gates": load_scanner_backtest_evidence()}

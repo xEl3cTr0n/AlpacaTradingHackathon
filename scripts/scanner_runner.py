@@ -49,6 +49,7 @@ def run_cycle(
             timeframe="15Min",
             liquidity_histories=liquidity_histories,
             annualization_periods=252 * 26,
+            evaluation_time=datetime.now(UTC),
         )
     else:
         histories = market_data.get_price_history(symbols, days=365)
