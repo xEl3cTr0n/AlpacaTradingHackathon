@@ -23,6 +23,9 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - A 24-name, 15-minute large-cap scanner for liquid equity-option candidates,
   ranked by 18 EMA crosses, prior-session daily trend, SPY alignment, relative
   strength, and volume.
+- An inspectable five-session potential-move thesis for every scanner row with
+  separate range and direction scores, trigger, target, invalidation, support,
+  conflict, and source methodology.
 - Live Alpaca-only dashboard data with an explicit unavailable state; synthetic
   fallback values are never shown to production users.
 - Alpaca stock-bar and news adapters for paper-account credentials.
@@ -217,6 +220,13 @@ conviction is at least 55%. Signals at 60%+ are production candidates; the
 separate execution lock. Crosses older than 90 minutes become watch-only. SPY
 and sector context remain council votes. The CLI then checks bid/ask width and at least 50 open
 contracts on both equity-option legs.
+
+Each ranked row also carries a five-session potential-move thesis. Range size is
+the larger of ATR(14) and realized-volatility estimates from completed Alpaca
+daily bars. Direction remains a separate signed score so bullish conviction
+cannot inflate the magnitude forecast. The result is explicitly labeled as a
+historical statistical range, not an options-implied move. Alpaca option IV,
+GEX, liquidity, and news join only during the deeper council review.
 
 Run one scan and optional CLI dry-run:
 
