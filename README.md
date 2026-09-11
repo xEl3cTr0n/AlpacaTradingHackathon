@@ -327,6 +327,11 @@ split fail-closed result is intentional; changing thresholds requires a new
 chronological test. The previously validated daily production policy can still
 submit paper trades when `ENABLE_PAPER_ORDERS=true`.
 
+The Scanner API and `verify_backtest_gate.py` share one typed evidence validator.
+The dashboard therefore shows the same production/exploration holdout state used
+by the GitHub paper worker. A changed scanner parameter, universe, malformed
+report, or missing report marks the evidence invalid and locks every tier.
+
 ### Backtest gate
 
 Reproduce the five-year walk-forward directional proxy test with:

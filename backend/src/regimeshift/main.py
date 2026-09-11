@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from regimeshift.config import Settings, get_settings
+from regimeshift.domain.backtest_evidence import load_scanner_backtest_evidence
 from regimeshift.domain.models import (
     AnalysisControls,
     AnalyzeRequest,
@@ -40,6 +42,8 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Operator-Token"],
 )
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
@@ -253,13 +257,16 @@ def scanner(
             if settings.market_data_mode.lower() == "alpaca"
             else "deterministic 15-minute demo tape"
         )
-        return LargeCapScanner().scan(
+        snapshot = LargeCapScanner().scan(
             histories,
             limit=limit,
             source=source,
             timeframe="15Min",
             liquidity_histories=liquidity_histories,
             annualization_periods=252 * 26,
+        )
+        return snapshot.model_copy(
+            update={"execution_gates": load_scanner_backtest_evidence(REPOSITORY_ROOT)}
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

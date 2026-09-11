@@ -10,6 +10,7 @@ MarketDataProvider
   -> PotentialMoveThesis (5-session ATR / realized-vol range + signed direction evidence)
   -> PotentialMoveBacktester (non-overlapping 5-session chronological calibration)
   -> On-demand OptionsThesis (near-ATM IV / straddle context + GEX; read-only)
+  -> Shared BacktestEvidence validator (dashboard + scheduled-worker fail-closed gates)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
   -> BottomUpQuad (security trend + ETF breadth)
   -> Alpaca option chain + contract OI -> GEX / GMC microstructure evidence

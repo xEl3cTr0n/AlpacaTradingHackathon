@@ -327,6 +327,17 @@ class PotentialMoveThesis(BaseModel):
     conflicting_evidence: list[str]
 
 
+class ScannerExecutionGates(BaseModel):
+    evidence_valid: bool
+    evidence_as_of: datetime | None = None
+    source: str
+    intraday_production_backtest_passed: bool
+    intraday_exploration_backtest_passed: bool
+    daily_production_backtest_passed: bool
+    paper_only: bool = True
+    details: list[str]
+
+
 class ScannerCandidate(BaseModel):
     rank: int = Field(ge=1)
     symbol: str
@@ -366,6 +377,7 @@ class ScannerSnapshot(BaseModel):
     ema_period: int = Field(ge=2)
     methodology: str
     candidates: list[ScannerCandidate]
+    execution_gates: ScannerExecutionGates | None = None
 
 
 class DecisionSnapshot(BaseModel):

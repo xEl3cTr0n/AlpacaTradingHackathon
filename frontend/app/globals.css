@@ -633,6 +633,11 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
 .conviction-orbit small { color: var(--text-muted); font: 500 8px var(--font-mono), monospace; text-transform: uppercase; }
 .scanner-table-panel { min-width: 0; overflow: hidden; }
 .scanner-methodology { margin: 14px 0 0; padding: 10px 12px; border-left: 2px solid var(--cyan); background: rgba(56, 189, 248, .05); color: var(--text-muted); font-size: 11px; }
+.scanner-gate-evidence { margin-top: 8px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: baseline; gap: 10px; }
+.scanner-gate-evidence strong { flex: 0 0 auto; color: var(--text-soft); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
+.scanner-gate-evidence span { color: var(--text-muted); font-size: 9px; }
+.scanner-gate-evidence.valid { border-color: rgba(53, 220, 123, .2); background: rgba(53, 220, 123, .035); }
+.scanner-gate-evidence.invalid { border-color: rgba(248, 113, 113, .24); background: rgba(248, 113, 113, .04); }
 .scanner-error { margin: 10px 0 0; color: var(--red); font-size: 12px; }
 .scanner-table { min-width: 1250px !important; }
 .scanner-table caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

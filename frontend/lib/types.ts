@@ -380,6 +380,16 @@ export interface ScannerSnapshot {
   ema_period: number;
   methodology: string;
   candidates: ScannerCandidate[];
+  execution_gates?: {
+    evidence_valid: boolean;
+    evidence_as_of?: string | null;
+    source: string;
+    intraday_production_backtest_passed: boolean;
+    intraday_exploration_backtest_passed: boolean;
+    daily_production_backtest_passed: boolean;
+    paper_only: true;
+    details: string[];
+  } | null;
 }
 
 export interface PlatformSnapshot {
