@@ -309,6 +309,24 @@ class ToolEvidence(BaseModel):
     summary: str
 
 
+class PotentialMoveThesis(BaseModel):
+    horizon_sessions: int = Field(default=5, ge=1, le=20)
+    expected_move_dollars: float = Field(ge=0)
+    expected_move_pct: float = Field(ge=0)
+    lower_bound: float = Field(gt=0)
+    upper_bound: float = Field(gt=0)
+    atr_14: float = Field(ge=0)
+    realized_vol_move_pct: float = Field(ge=0)
+    direction_score: float = Field(ge=-100, le=100)
+    move_confidence: float = Field(ge=0, le=1)
+    trigger: str
+    target: str
+    invalidation: str
+    basis: str
+    supporting_evidence: list[str]
+    conflicting_evidence: list[str]
+
+
 class ScannerCandidate(BaseModel):
     rank: int = Field(ge=1)
     symbol: str
@@ -332,6 +350,7 @@ class ScannerCandidate(BaseModel):
     average_dollar_volume: float = Field(ge=0)
     market_aligned: bool
     liquidity_tier: str
+    move_thesis: PotentialMoveThesis
     evidence: list[str]
 
 

@@ -9,6 +9,7 @@ from regimeshift.domain.models import (
     ScannerPattern,
     ScannerSnapshot,
 )
+from regimeshift.domain.potential_move import build_potential_move_thesis
 
 LARGE_CAP_UNIVERSE: dict[str, str] = {
     "AAPL": "Apple",
@@ -356,6 +357,17 @@ class LargeCapScanner:
             if direction == Direction.BEARISH
             else "no_trade"
         )
+        move_thesis = build_potential_move_thesis(
+            liquidity_points,
+            spot=current.close,
+            direction=direction,
+            conviction=conviction,
+            ema_18=ema_18[-1],
+            rsi_14=rsi_14[-1],
+            relative_strength=relative_strength,
+            volume_ratio=volume_ratio,
+            market_aligned=market_aligned,
+        )
         entry_checks = [
             "Entry gate: higher-timeframe trend is sideways"
             if direction == Direction.SIDEWAYS
@@ -396,6 +408,7 @@ class LargeCapScanner:
             average_dollar_volume=round(average_dollar_volume, 2),
             market_aligned=market_aligned,
             liquidity_tier=liquidity_tier,
+            move_thesis=move_thesis,
             evidence=[
                 f"Price {current.close:.2f} vs EMA(18) {ema_18[-1]:.2f}",
                 f"EMA(18) five-session slope {slope:+.2%}",

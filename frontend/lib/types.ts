@@ -317,6 +317,23 @@ export interface ScannerCandidate {
   average_dollar_volume: number;
   market_aligned: boolean;
   liquidity_tier: string;
+  move_thesis: {
+    horizon_sessions: number;
+    expected_move_dollars: number;
+    expected_move_pct: number;
+    lower_bound: number;
+    upper_bound: number;
+    atr_14: number;
+    realized_vol_move_pct: number;
+    direction_score: number;
+    move_confidence: number;
+    trigger: string;
+    target: string;
+    invalidation: string;
+    basis: string;
+    supporting_evidence: string[];
+    conflicting_evidence: string[];
+  };
   evidence: string[];
 }
 

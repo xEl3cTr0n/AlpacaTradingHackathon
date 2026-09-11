@@ -5,9 +5,12 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Crosshair,
+  Gauge,
   RefreshCw,
   Search,
   ShieldAlert,
+  Target,
+  TriangleAlert,
 } from "lucide-react";
 import { useState, useTransition } from "react";
 import type { CSSProperties } from "react";
@@ -102,23 +105,65 @@ export function OpportunityScanner({
       </section>
 
       {lead && (
-        <section className={`scanner-lead panel ${lead.actionable ? "actionable" : "watch"}`}>
-          <div className="scanner-lead-copy">
-            <p className="eyebrow">Highest-ranked setup</p>
-            <div className="scanner-symbol-line">
-              <strong>{lead.symbol}</strong><span>{lead.name}</span>
-              <b className={lead.direction === "bullish" ? "positive" : lead.direction === "bearish" ? "negative" : ""}>
-                {lead.direction === "bullish" ? <ArrowUpRight size={15} /> : lead.direction === "bearish" ? <ArrowDownRight size={15} /> : null}
-                {patternLabel(lead.pattern)}
-              </b>
-              <b>{lead.signal_tier} · ${lead.risk_cap_dollars.toFixed(0)} max</b>
+        <>
+          <section className={`scanner-lead panel ${lead.actionable ? "actionable" : "watch"}`}>
+            <div className="scanner-lead-copy">
+              <p className="eyebrow">Highest-ranked setup</p>
+              <div className="scanner-symbol-line">
+                <strong>{lead.symbol}</strong><span>{lead.name}</span>
+                <b className={lead.direction === "bullish" ? "positive" : lead.direction === "bearish" ? "negative" : ""}>
+                  {lead.direction === "bullish" ? <ArrowUpRight size={15} /> : lead.direction === "bearish" ? <ArrowDownRight size={15} /> : null}
+                  {patternLabel(lead.pattern)}
+                </b>
+                <b>{lead.signal_tier} · ${lead.risk_cap_dollars.toFixed(0)} max</b>
+              </div>
+              <p>{lead.evidence.slice(0, 3).join(" · ")}</p>
             </div>
-            <p>{lead.evidence.slice(0, 3).join(" · ")}</p>
-          </div>
-          <div className="conviction-orbit" aria-label={`${Math.round(lead.conviction * 100)} percent conviction`} style={{ "--conviction": `${Math.round(lead.conviction * 360)}deg` } as CSSProperties}>
-            <span><strong>{Math.round(lead.conviction * 100)}%</strong><small>conviction</small></span>
-          </div>
-        </section>
+            <div className="conviction-orbit" aria-label={`${Math.round(lead.conviction * 100)} percent conviction`} style={{ "--conviction": `${Math.round(lead.conviction * 360)}deg` } as CSSProperties}>
+              <span><strong>{Math.round(lead.conviction * 100)}%</strong><small>conviction</small></span>
+            </div>
+          </section>
+
+          <section className="move-thesis panel" aria-label={`${lead.symbol} potential move thesis`}>
+            <div className="move-range">
+              <div className="panel-heading">
+                <div><p className="eyebrow">Potential move</p><h2>{lead.move_thesis.horizon_sessions}-session range</h2></div>
+                <span className="source-label">bars · not implied</span>
+              </div>
+              <div className="move-range-values">
+                <span className="negative">${lead.move_thesis.lower_bound.toFixed(2)}</span>
+                <strong>${lead.current_price.toFixed(2)}</strong>
+                <span className="positive">${lead.move_thesis.upper_bound.toFixed(2)}</span>
+              </div>
+              <div className="move-range-track" aria-label={`Estimated range from ${lead.move_thesis.lower_bound.toFixed(2)} to ${lead.move_thesis.upper_bound.toFixed(2)}`}>
+                <i /><b />
+              </div>
+              <div className="move-stats">
+                <span><Gauge size={14} /><b>±${lead.move_thesis.expected_move_dollars.toFixed(2)}</b><small>{(lead.move_thesis.expected_move_pct * 100).toFixed(1)}% expected</small></span>
+                <span><Target size={14} /><b>{lead.move_thesis.direction_score > 0 ? "+" : ""}{lead.move_thesis.direction_score.toFixed(0)}</b><small>direction score</small></span>
+                <span><CheckCircle2 size={14} /><b>{Math.round(lead.move_thesis.move_confidence * 100)}%</b><small>range confidence</small></span>
+              </div>
+              <p className="move-basis">{lead.move_thesis.basis}</p>
+            </div>
+
+            <div className="thesis-rules">
+              <div><span>Trigger</span><p>{lead.move_thesis.trigger}</p></div>
+              <div><span>Target</span><p>{lead.move_thesis.target}</p></div>
+              <div className="invalidation"><span>Invalidation</span><p>{lead.move_thesis.invalidation}</p></div>
+            </div>
+
+            <div className="thesis-evidence support">
+              <h3><CheckCircle2 size={14} /> Support</h3>
+              <ul>{lead.move_thesis.supporting_evidence.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div className="thesis-evidence conflict">
+              <h3><TriangleAlert size={14} /> Conflict</h3>
+              {lead.move_thesis.conflicting_evidence.length ? (
+                <ul>{lead.move_thesis.conflicting_evidence.map((item) => <li key={item}>{item}</li>)}</ul>
+              ) : <p>No measured conflict.</p>}
+            </div>
+          </section>
+        </>
       )}
 
       <section className="panel scanner-table-panel">
@@ -131,13 +176,14 @@ export function OpportunityScanner({
         <div className="table-scroll">
           <table className="scanner-table">
             <caption>Ranked large-cap 18 EMA scanner candidates</caption>
-            <thead><tr><th>Rank</th><th>Symbol / setup</th><th>Price vs 18 EMA</th><th>Conviction</th><th>Relative strength</th><th>Volume</th><th>Liquidity</th><th>Trade signal</th></tr></thead>
+            <thead><tr><th>Rank</th><th>Symbol / setup</th><th>Price vs 18 EMA</th><th>5-session move</th><th>Conviction</th><th>Relative strength</th><th>Volume</th><th>Liquidity</th><th>Trade signal</th></tr></thead>
             <tbody>
               {scanner.candidates.map((candidate) => (
                 <tr key={candidate.symbol} className={candidate.actionable ? "actionable-row" : ""}>
                   <td><span className="scanner-rank">{candidate.rank.toString().padStart(2, "0")}</span></td>
                   <td><strong>{candidate.symbol}</strong><small>{patternLabel(candidate.pattern)} · {candidate.signal_tier}</small></td>
                   <td><strong>${candidate.current_price.toFixed(2)}</strong><small>EMA ${candidate.ema_18.toFixed(2)}</small></td>
+                  <td><strong>±${candidate.move_thesis.expected_move_dollars.toFixed(2)}</strong><small>{candidate.move_thesis.lower_bound.toFixed(2)}–{candidate.move_thesis.upper_bound.toFixed(2)}</small></td>
                   <td><div className="mini-conviction"><span style={{ width: `${candidate.conviction * 100}%` }} /></div><small>{Math.round(candidate.conviction * 100)}%</small></td>
                   <td className={candidate.relative_strength_20d >= 0 ? "positive" : "negative"}>{candidate.relative_strength_20d >= 0 ? "+" : ""}{(candidate.relative_strength_20d * 100).toFixed(1)}%</td>
                   <td><strong>{candidate.volume_ratio.toFixed(2)}×</strong><small>20-bar average</small></td>
