@@ -15,9 +15,11 @@ from regimeshift.domain.models import (
     ManualTradeRequest,
     ManualTradeResult,
     OptionChainSnapshot,
+    OptionsThesisSnapshot,
     PlatformSnapshot,
     ScannerSnapshot,
 )
+from regimeshift.domain.options_thesis import build_options_thesis
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.live_tape import get_live_tick
@@ -168,6 +170,40 @@ def option_chain(
     except Exception as error:
         raise HTTPException(
             status_code=502, detail=f"Option chain request failed: {error}"
+        ) from error
+
+
+@app.get("/api/v1/scanner/options-thesis", response_model=OptionsThesisSnapshot)
+def scanner_options_thesis(
+    settings: SettingsDependency,
+    symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
+) -> OptionsThesisSnapshot:
+    """Load read-only Alpaca options confirmation for one scanner symbol."""
+    normalized = symbol.upper()
+    if normalized not in LARGE_CAP_UNIVERSE and normalized != "SPY":
+        raise HTTPException(
+            status_code=422,
+            detail="Options thesis is limited to SPY or the scanner universe",
+        )
+    try:
+        spot = get_live_tick(settings, normalized).price
+        provider = build_options_provider(settings)
+        call_chain = provider.get_chain(normalized, spot, "call", "otm", limit=1)
+        put_chain = provider.get_chain(
+            normalized,
+            spot,
+            "put",
+            "otm",
+            expiration=call_chain.expiration,
+            limit=1,
+        )
+        microstructure = provider.get_assessment(normalized, spot)
+        return build_options_thesis(call_chain, put_chain, microstructure)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail=f"Options thesis request failed: {error}"
         ) from error
 
 

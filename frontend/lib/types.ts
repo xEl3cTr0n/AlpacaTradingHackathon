@@ -288,6 +288,37 @@ export interface OptionChainSnapshot {
   source: string;
 }
 
+export interface OptionsThesisSnapshot {
+  underlying_symbol: string;
+  underlying_price: number;
+  expiration: string;
+  dte: number;
+  as_of: string;
+  source: string;
+  status: "available" | "partial";
+  call_symbol: string;
+  put_symbol: string;
+  call_strike: number;
+  put_strike: number;
+  average_implied_volatility?: number | null;
+  iv_expected_move_dollars?: number | null;
+  iv_expected_move_pct?: number | null;
+  straddle_cost_dollars?: number | null;
+  straddle_cost_pct?: number | null;
+  estimator_agreement?: number | null;
+  maximum_quote_spread_pct?: number | null;
+  minimum_open_interest?: number | null;
+  gamma_regime: "stabilizing" | "amplifying" | "mixed" | "unavailable";
+  net_gex: number;
+  gamma_concentration?: number | null;
+  call_wall?: number | null;
+  put_wall?: number | null;
+  key_gamma_strike?: number | null;
+  data_quality: number;
+  evidence: string[];
+  limitations: string[];
+}
+
 export interface EquityPoint {
   timestamp: string;
   equity: number;

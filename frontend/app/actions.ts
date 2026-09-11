@@ -1,7 +1,7 @@
 "use server";
 
-import { analyzeSnapshot, executeManualTrade, fetchScanner, previewManualTrade } from "@/lib/api";
-import type { AnalysisControls, DecisionSnapshot, ManualTradePreview, ManualTradeRequest, ManualTradeResult, ScannerSnapshot } from "@/lib/types";
+import { analyzeSnapshot, executeManualTrade, fetchOptionsThesis, fetchScanner, previewManualTrade } from "@/lib/api";
+import type { AnalysisControls, DecisionSnapshot, ManualTradePreview, ManualTradeRequest, ManualTradeResult, OptionsThesisSnapshot, ScannerSnapshot } from "@/lib/types";
 
 export async function runAnalysis(
   symbol: string,
@@ -16,6 +16,12 @@ export async function runAnalysis(
 
 export async function refreshScanner(): Promise<ScannerSnapshot> {
   return fetchScanner(12);
+}
+
+export async function loadOptionsThesis(symbol: string): Promise<OptionsThesisSnapshot> {
+  const normalized = symbol.trim().toUpperCase();
+  if (!/^[A-Z.]{1,10}$/.test(normalized)) throw new Error("Use a valid scanner ticker.");
+  return fetchOptionsThesis(normalized);
 }
 
 export async function runManualPreview(

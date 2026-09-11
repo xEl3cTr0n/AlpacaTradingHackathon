@@ -9,6 +9,7 @@ MarketDataProvider
   -> LargeCapScanner (24 names, completed 15-minute 18 EMA cross + daily context)
   -> PotentialMoveThesis (5-session ATR / realized-vol range + signed direction evidence)
   -> PotentialMoveBacktester (non-overlapping 5-session chronological calibration)
+  -> On-demand OptionsThesis (near-ATM IV / straddle context + GEX; read-only)
   -> RegimeEngine + SectorRotationEngine + SwingEngine
   -> BottomUpQuad (security trend + ETF breadth)
   -> Alpaca option chain + contract OI -> GEX / GMC microstructure evidence

@@ -483,6 +483,37 @@ class OptionChainSnapshot(BaseModel):
     source: str
 
 
+class OptionsThesisSnapshot(BaseModel):
+    underlying_symbol: str
+    underlying_price: float = Field(gt=0)
+    expiration: date
+    dte: int = Field(ge=0)
+    as_of: datetime
+    source: str
+    status: str
+    call_symbol: str
+    put_symbol: str
+    call_strike: float = Field(gt=0)
+    put_strike: float = Field(gt=0)
+    average_implied_volatility: float | None = Field(default=None, ge=0)
+    iv_expected_move_dollars: float | None = Field(default=None, ge=0)
+    iv_expected_move_pct: float | None = Field(default=None, ge=0)
+    straddle_cost_dollars: float | None = Field(default=None, ge=0)
+    straddle_cost_pct: float | None = Field(default=None, ge=0)
+    estimator_agreement: float | None = Field(default=None, ge=0, le=1)
+    maximum_quote_spread_pct: float | None = Field(default=None, ge=0)
+    minimum_open_interest: int | None = Field(default=None, ge=0)
+    gamma_regime: GammaRegime
+    net_gex: float
+    gamma_concentration: float | None = Field(default=None, ge=0, le=1)
+    call_wall: float | None = Field(default=None, gt=0)
+    put_wall: float | None = Field(default=None, gt=0)
+    key_gamma_strike: float | None = Field(default=None, gt=0)
+    data_quality: float = Field(ge=0, le=1)
+    evidence: list[str]
+    limitations: list[str]
+
+
 class EquityPoint(BaseModel):
     timestamp: datetime
     equity: float

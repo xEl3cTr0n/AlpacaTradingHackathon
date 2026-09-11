@@ -4,6 +4,7 @@ import type {
   ManualTradePreview,
   ManualTradeRequest,
   ManualTradeResult,
+  OptionsThesisSnapshot,
   PlatformSnapshot,
   ScannerSnapshot,
 } from "@/lib/types";
@@ -71,6 +72,19 @@ export async function fetchScanner(limit = 12): Promise<ScannerSnapshot> {
   const scanner = await responseJson<ScannerSnapshot>(response, "Scanner API");
   requireLiveSource("Scanner API", scanner.source);
   return scanner;
+}
+
+export async function fetchOptionsThesis(symbol: string): Promise<OptionsThesisSnapshot> {
+  const response = await fetch(
+    `${apiUrl}/api/v1/scanner/options-thesis?symbol=${encodeURIComponent(symbol)}`,
+    {
+      cache: "no-store",
+      signal: AbortSignal.timeout(35_000),
+    },
+  );
+  const thesis = await responseJson<OptionsThesisSnapshot>(response, "Options thesis API");
+  requireLiveSource("Options thesis API", thesis.source);
+  return thesis;
 }
 
 export async function previewManualTrade(

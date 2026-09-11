@@ -4,6 +4,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
+  ChartNoAxesCombined,
   Crosshair,
   Gauge,
   RefreshCw,
@@ -14,8 +15,8 @@ import {
 } from "lucide-react";
 import { useState, useTransition } from "react";
 import type { CSSProperties } from "react";
-import { refreshScanner, runAnalysis } from "@/app/actions";
-import type { DecisionSnapshot, ScannerCandidate, ScannerSnapshot } from "@/lib/types";
+import { loadOptionsThesis, refreshScanner, runAnalysis } from "@/app/actions";
+import type { DecisionSnapshot, OptionsThesisSnapshot, ScannerCandidate, ScannerSnapshot } from "@/lib/types";
 
 function patternLabel(pattern: ScannerCandidate["pattern"]): string {
   return pattern.replaceAll("_", " ").replace("18ema", "18 EMA");
@@ -45,15 +46,34 @@ export function OpportunityScanner({
   const [scanner, setScanner] = useState(initialScanner);
   const [error, setError] = useState("");
   const [activeSymbol, setActiveSymbol] = useState("");
+  const [optionsThesis, setOptionsThesis] = useState<OptionsThesisSnapshot | null>(null);
+  const [optionsError, setOptionsError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [isOptionsPending, startOptionsTransition] = useTransition();
 
   function rescan() {
     setError("");
     startTransition(async () => {
       try {
         setScanner(await refreshScanner());
+        setOptionsThesis(null);
       } catch (scanError) {
         setError(scanError instanceof Error ? scanError.message : "Scanner refresh failed");
+      }
+    });
+  }
+
+  function inspectOptions(candidate: ScannerCandidate) {
+    setOptionsError("");
+    startOptionsTransition(async () => {
+      try {
+        setOptionsThesis(await loadOptionsThesis(candidate.symbol));
+      } catch (optionsLoadError) {
+        setOptionsError(
+          optionsLoadError instanceof Error
+            ? optionsLoadError.message
+            : "Alpaca options context failed",
+        );
       }
     });
   }
@@ -144,6 +164,11 @@ export function OpportunityScanner({
                 <span><CheckCircle2 size={14} /><b>{Math.round(lead.move_thesis.move_confidence * 100)}%</b><small>range confidence</small></span>
               </div>
               <p className="move-basis">{lead.move_thesis.basis}</p>
+              <button className="scanner-options-load" type="button" onClick={() => inspectOptions(lead)} disabled={isOptionsPending}>
+                <ChartNoAxesCombined size={14} aria-hidden="true" />
+                {isOptionsPending ? "Loading Alpaca options…" : optionsThesis?.underlying_symbol === lead.symbol ? "Refresh options context" : "Load options context"}
+              </button>
+              {optionsError && <p className="scanner-error" role="alert">{optionsError}</p>}
             </div>
 
             <div className="thesis-rules">
@@ -163,6 +188,26 @@ export function OpportunityScanner({
               ) : <p>No measured conflict.</p>}
             </div>
           </section>
+          {optionsThesis && optionsThesis.underlying_symbol === lead.symbol && (
+            <section className="options-thesis panel" aria-label={`${lead.symbol} Alpaca options context`}>
+              <div className="panel-heading">
+                <div><p className="eyebrow">Alpaca options confirmation · read only</p><h2>{lead.symbol} expiry move and gamma map</h2></div>
+                <span className="source-label">{optionsThesis.status} · {optionsThesis.dte} DTE</span>
+              </div>
+              <div className="options-thesis-grid">
+                <article><span>IV expiry move</span><strong>{optionsThesis.iv_expected_move_dollars != null ? `±$${optionsThesis.iv_expected_move_dollars.toFixed(2)}` : "N/A"}</strong><small>{optionsThesis.average_implied_volatility != null ? `${(optionsThesis.average_implied_volatility * 100).toFixed(1)}% average IV` : "IV unavailable"}</small></article>
+                <article><span>Call + put midpoint</span><strong>{optionsThesis.straddle_cost_dollars != null ? `$${optionsThesis.straddle_cost_dollars.toFixed(2)}` : "N/A"}</strong><small>{optionsThesis.estimator_agreement != null ? `${Math.round(optionsThesis.estimator_agreement * 100)}% estimator agreement` : "Agreement unavailable"}</small></article>
+                <article><span>Gamma regime</span><strong>{optionsThesis.gamma_regime}</strong><small>{optionsThesis.gamma_concentration != null ? `${Math.round(optionsThesis.gamma_concentration * 100)}% concentration` : "Concentration unavailable"}</small></article>
+                <article><span>Gamma walls</span><strong>{optionsThesis.put_wall != null ? optionsThesis.put_wall.toFixed(0) : "—"} / {optionsThesis.call_wall != null ? optionsThesis.call_wall.toFixed(0) : "—"}</strong><small>put / call</small></article>
+                <article><span>Quote quality</span><strong>{optionsThesis.maximum_quote_spread_pct != null ? `${(optionsThesis.maximum_quote_spread_pct * 100).toFixed(1)}%` : "N/A"}</strong><small>{optionsThesis.minimum_open_interest != null ? `${optionsThesis.minimum_open_interest.toLocaleString()} min OI` : "OI unavailable"}</small></article>
+              </div>
+              <div className="options-evidence-grid">
+                <div><h3>Measured evidence</h3><ul>{optionsThesis.evidence.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                <div><h3>Limits</h3><ul>{optionsThesis.limitations.map((item) => <li key={item}>{item}</li>)}</ul></div>
+              </div>
+              <footer className="scanner-freshness"><span>Expiry {new Date(`${optionsThesis.expiration}T00:00:00`).toLocaleDateString()}</span><span>{optionsThesis.source}</span></footer>
+            </section>
+          )}
         </>
       )}
 

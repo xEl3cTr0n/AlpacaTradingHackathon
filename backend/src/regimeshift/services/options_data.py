@@ -242,7 +242,7 @@ class AlpacaOptionsProvider:
             expirations=expirations,
             contracts=[OptionChainContract(**item) for item in selected],
             as_of=datetime.now(UTC),
-            source="Alpaca Options API live quotes + contract open interest",
+            source="Alpaca Options API snapshot quotes + contract open interest",
         )
 
 

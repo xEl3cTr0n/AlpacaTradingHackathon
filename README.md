@@ -26,6 +26,8 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
 - An inspectable five-session potential-move thesis for every scanner row with
   separate range and direction scores, trigger, target, invalidation, support,
   conflict, and source methodology.
+- On-demand Alpaca options confirmation for the lead setup: near-ATM IV expiry
+  move, call-plus-put midpoint, quote width, open interest, GEX regime, and walls.
 - Live Alpaca-only dashboard data with an explicit unavailable state; synthetic
   fallback values are never shown to production users.
 - Alpaca stock-bar and news adapters for paper-account credentials.
@@ -227,6 +229,13 @@ daily bars. Direction remains a separate signed score so bullish conviction
 cannot inflate the magnitude forecast. The result is explicitly labeled as a
 historical statistical range, not an options-implied move. Alpaca option IV,
 GEX, liquidity, and news join only during the deeper council review.
+
+The Scanner's **Load options context** control performs a read-only Alpaca
+request for the selected lead. It compares near-ATM IV and call-plus-put
+midpoints, then shows quote quality and the GEX map. This context is structured
+evidence only: it cannot vote, size, or authorize a paper order. Quote provenance
+is labeled conservatively because accounts without OPRA may receive indicative
+Alpaca options snapshots.
 
 Run one scan and optional CLI dry-run:
 
