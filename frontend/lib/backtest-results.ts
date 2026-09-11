@@ -36,7 +36,7 @@ export interface BacktestReport {
 
 export const potentialMoveCalibration = {
   name: "Five-session potential-move range",
-  generatedAt: "2026-09-11T09:48:16.271311+00:00",
+  generatedAt: "2026-09-11T10:18:02.655972+00:00",
   source: "Alpaca IEX fully adjusted daily bars",
   period: "Sep 13, 2021 – Sep 10, 2026",
   symbols: 25,
@@ -61,6 +61,35 @@ export const potentialMoveCalibration = {
     meanRealizedMove: 0.0346,
     medianRealizedToExpected: 0.462,
   },
+  indicatorResearch: [
+    {
+      name: "Directional efficiency",
+      status: "failed",
+      role: "Diagnostic only",
+      observations: 752,
+      result: "48.14% continuation hit · -0.37% signed return",
+    },
+    {
+      name: "Volatility expansion",
+      status: "mixed",
+      role: "Range context only",
+      observations: 571,
+      result: "Holdout ordering passed · training ordering failed",
+    },
+    {
+      name: "Average overnight gap",
+      status: "supported",
+      role: "Risk warning only",
+      observations: 208,
+      result: "3.81% elevated future gap · 1.67% ordinary",
+    },
+  ] as Array<{
+    name: string;
+    status: "failed" | "mixed" | "supported";
+    role: string;
+    observations: number;
+    result: string;
+  }>,
   parameters: [
     ["Range", "max of ATR(14) and realized volatility"],
     ["Horizon", "5 sessions"],
@@ -71,6 +100,7 @@ export const potentialMoveCalibration = {
     "Validates an underlying statistical range, not an options-implied move.",
     "Cross-sectional observations share market regimes and are not independent.",
     "Corporate events are not separated from ordinary sessions.",
+    "The aggregate indicator-promotion gate failed; gauges remain research-only.",
     "Display-only: this result cannot authorize paper execution.",
   ],
 };

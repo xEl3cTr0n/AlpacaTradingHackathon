@@ -309,6 +309,15 @@ class ToolEvidence(BaseModel):
     summary: str
 
 
+class ResearchIndicatorEvidence(BaseModel):
+    indicator: str
+    value: float
+    status: str
+    role: str
+    holdout_observations: int = Field(ge=0)
+    validation_summary: str
+
+
 class PotentialMoveThesis(BaseModel):
     horizon_sessions: int = Field(default=5, ge=1, le=20)
     expected_move_dollars: float = Field(ge=0)
@@ -327,6 +336,7 @@ class PotentialMoveThesis(BaseModel):
     target: str
     invalidation: str
     basis: str
+    research_indicators: list[ResearchIndicatorEvidence]
     supporting_evidence: list[str]
     conflicting_evidence: list[str]
 

@@ -366,6 +366,14 @@ export interface ScannerCandidate {
     target: string;
     invalidation: string;
     basis: string;
+    research_indicators: Array<{
+      indicator: string;
+      value: number;
+      status: "holdout_failed" | "mixed" | "holdout_supported";
+      role: "diagnostic_only" | "range_context_only" | "risk_warning_only";
+      holdout_observations: number;
+      validation_summary: string;
+    }>;
     supporting_evidence: string[];
     conflicting_evidence: string[];
   };

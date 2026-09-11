@@ -25,13 +25,16 @@ def _history(multiplier: float = 1.0) -> list[PricePoint]:
 
 
 def test_move_backtest_is_chronological_and_never_execution_eligible() -> None:
-    report = PotentialMoveBacktester().evaluate(
-        {"SPY": _history(), "AAPL": _history(1.5)}
-    )
+    report = PotentialMoveBacktester().evaluate({"SPY": _history(), "AAPL": _history(1.5)})
 
     assert report["split_date"]
     assert report["train"]["observations"] > 0
     assert report["holdout"]["observations"] > 0
     assert 0 <= report["holdout"]["terminal_coverage"] <= 1
+    research = report["indicator_research"]["holdout"]
+    assert "directional_efficiency" in research
+    assert "volatility_expansion" in research
+    assert "overnight_gap_risk" in research
+    assert research["execution_eligible"] is False
     assert report["execution_eligible"] is False
     assert "available at each close" in report["methodology"]

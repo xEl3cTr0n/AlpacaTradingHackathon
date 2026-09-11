@@ -93,31 +93,9 @@ def build_potential_move_thesis(
         supporting.append(f"Volume confirms at {volume_ratio:.2f}x average")
     else:
         conflicting.append(f"Volume is light at {volume_ratio:.2f}x average")
-    directional_efficiency_alignment = directional_efficiency * direction_sign
-    if direction_sign and directional_efficiency_alignment >= 0.25:
-        supporting.append(
-            "20-session directional efficiency confirms a persistent move "
-            f"({directional_efficiency:+.0%})"
-        )
-    elif direction_sign and directional_efficiency_alignment <= 0:
-        conflicting.append(
-            f"20-session directional efficiency opposes the thesis ({directional_efficiency:+.0%})"
-        )
-    elif direction_sign:
-        conflicting.append(
-            f"20-session directional efficiency is weak/choppy ({directional_efficiency:+.0%})"
-        )
-    if volatility_expansion_ratio >= 1.20:
-        supporting.append(
-            f"Recent true range is expanding ({volatility_expansion_ratio:.2f}x baseline)"
-        )
-    elif volatility_expansion_ratio <= 0.80:
-        conflicting.append(
-            f"Recent true range is compressed ({volatility_expansion_ratio:.2f}x baseline)"
-        )
     if average_gap_pct >= 0.015:
         conflicting.append(
-            f"Average overnight gap is {average_gap_pct:.1%}; entry slippage risk is elevated"
+            f"Validated gap-risk warning: {average_gap_pct:.1%} average overnight gap"
         )
     if direction == Direction.BULLISH and rsi_14 >= 70:
         conflicting.append(f"RSI {rsi_14:.1f} is extended for a bullish entry")
@@ -161,6 +139,41 @@ def build_potential_move_thesis(
             "range plus research-only trend-efficiency, volatility-expansion, and "
             "overnight-gap diagnostics; not an options-implied move"
         ),
+        research_indicators=[
+            {
+                "indicator": "20-session directional efficiency",
+                "value": round(directional_efficiency, 4),
+                "status": "holdout_failed",
+                "role": "diagnostic_only",
+                "holdout_observations": 752,
+                "validation_summary": (
+                    "High-efficiency cohort had a 48.1% directional hit rate and "
+                    "-0.37% mean signed five-session return."
+                ),
+            },
+            {
+                "indicator": "volatility expansion ratio",
+                "value": round(volatility_expansion_ratio, 4),
+                "status": "mixed",
+                "role": "range_context_only",
+                "holdout_observations": 571,
+                "validation_summary": (
+                    "Expanded versus compressed ordering passed holdout but failed "
+                    "the training sample."
+                ),
+            },
+            {
+                "indicator": "20-session average overnight gap",
+                "value": round(average_gap_pct, 4),
+                "status": "holdout_supported",
+                "role": "risk_warning_only",
+                "holdout_observations": 208,
+                "validation_summary": (
+                    "Elevated-gap cohort averaged a 3.81% future maximum gap versus "
+                    "1.67% for the ordinary cohort."
+                ),
+            },
+        ],
         supporting_evidence=supporting,
         conflicting_evidence=conflicting,
     )

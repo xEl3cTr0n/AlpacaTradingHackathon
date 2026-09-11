@@ -85,6 +85,14 @@ for call/put walls, directional bias, put trapdoor, key gamma, key delta, and
 hedge wall. Those levels are exposed as evidence and chart overlays only, so
 they cannot grant authorization or weaken the deterministic Risk gate.
 
+Potential-move indicator research is also fail-closed. A five-year Alpaca
+walk-forward report stores train and chronological holdout cohorts for directional
+efficiency, volatility expansion, and average overnight gaps. Directional
+efficiency failed holdout and volatility expansion was inconsistent, so both are
+neutral diagnostics. Gap risk separated future maximum-gap magnitude in both
+samples and may appear as a risk warning only. The aggregate promotion gate
+remains false; these fields do not alter conviction, votes, sizing, or execution.
+
 The manual ticket obtains a bounded Alpaca chain, filters to one expiry and the
 ten nearest requested ITM/OTM calls or puts, then requires a structurally valid
 vertical spread. Submission remains a one-lot atomic MLeg paper order protected

@@ -31,6 +31,15 @@ export function BacktestView() {
           <article><span>Realized move</span><strong>{plainPct(potentialMoveCalibration.holdout.meanRealizedMove)}</strong><small>Absolute close move</small></article>
           <article><span>Realized / expected</span><strong>{potentialMoveCalibration.holdout.medianRealizedToExpected.toFixed(3)}×</strong><small>Holdout median</small></article>
         </div>
+        <div className="indicator-validation-grid" aria-label="Research indicator holdout results">
+          {potentialMoveCalibration.indicatorResearch.map((indicator) => (
+            <article className={indicator.status} key={indicator.name}>
+              <header><span>{indicator.name}</span><b>{indicator.status}</b></header>
+              <strong>{indicator.result}</strong>
+              <small>{indicator.observations.toLocaleString()} holdout observations · {indicator.role}</small>
+            </article>
+          ))}
+        </div>
         <div className="execution-lock-note"><ShieldX size={16} aria-hidden="true" /><div><strong>Execution remains locked</strong><p>Calibration passed for display, but this historical range cannot vote, size, or authorize an Alpaca paper order.</p></div></div>
         <div className="backtest-detail-grid">
           <div><h3>Fixed policy</h3><dl>{potentialMoveCalibration.parameters.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>

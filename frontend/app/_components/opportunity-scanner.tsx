@@ -179,6 +179,15 @@ export function OpportunityScanner({
                 <span><Gauge size={14} /><b>{lead.move_thesis.volatility_expansion_ratio.toFixed(2)}×</b><small>range expansion</small></span>
                 <span><TriangleAlert size={14} /><b>{(lead.move_thesis.average_gap_pct_20d * 100).toFixed(2)}%</b><small>average gap</small></span>
               </div>
+              <ul className="research-indicator-status" aria-label="Historical indicator validation">
+                {lead.move_thesis.research_indicators.map((indicator) => (
+                  <li key={indicator.indicator}>
+                    <span>{indicator.indicator}</span>
+                    <b>{indicator.status.replaceAll("_", " ")}</b>
+                    <small>{indicator.validation_summary} Role: {indicator.role.replaceAll("_", " ")}.</small>
+                  </li>
+                ))}
+              </ul>
               <p className="move-basis">Research only · cannot authorize a trade. {lead.move_thesis.basis}</p>
               <button className="scanner-options-load" type="button" onClick={() => inspectOptions(lead)} disabled={isOptionsPending}>
                 <ChartNoAxesCombined size={14} aria-hidden="true" />

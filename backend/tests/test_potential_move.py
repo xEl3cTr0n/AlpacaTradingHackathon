@@ -41,6 +41,9 @@ def test_move_magnitude_is_independent_from_direction() -> None:
     assert bullish.lower_bound < common["spot"] < bullish.upper_bound
     assert bullish.directional_efficiency_20d == 1
     assert bullish.research_only is True
+    assert bullish.research_indicators[0].status == "holdout_failed"
+    assert bullish.research_indicators[0].role == "diagnostic_only"
+    assert bullish.research_indicators[2].status == "holdout_supported"
 
 
 def test_move_thesis_exposes_trigger_target_invalidation_and_conflict() -> None:

@@ -28,6 +28,140 @@
     "lower_breach_rate": 0.1451,
     "range_rmse_pct": 0.0461
   },
+  "indicator_research": {
+    "train": {
+      "thresholds": {
+        "high_directional_efficiency": 0.25,
+        "expanded_volatility_ratio": 1.2,
+        "compressed_volatility_ratio": 0.8,
+        "elevated_average_gap_pct": 0.015
+      },
+      "directional_efficiency": {
+        "high": {
+          "observations": 1777,
+          "directional_hit_rate": 0.5352,
+          "mean_signed_return_pct": 0.0019,
+          "mean_absolute_return_pct": 0.0336
+        },
+        "weak_or_choppy": {
+          "observations": 2311,
+          "directional_hit_rate": 0.4985,
+          "mean_signed_return_pct": -0.0019,
+          "mean_absolute_return_pct": 0.0347
+        },
+        "research_gate_passed": true
+      },
+      "volatility_expansion": {
+        "expanded": {
+          "observations": 577,
+          "terminal_coverage": 0.9029,
+          "path_coverage": 0.8094,
+          "mean_realized_move_pct": 0.0339,
+          "mean_future_max_gap_pct": 0.0191
+        },
+        "normal": {
+          "observations": 3199,
+          "terminal_coverage": 0.8131,
+          "path_coverage": 0.6608,
+          "mean_realized_move_pct": 0.0342,
+          "mean_future_max_gap_pct": 0.0176
+        },
+        "compressed": {
+          "observations": 313,
+          "terminal_coverage": 0.7412,
+          "path_coverage": 0.4984,
+          "mean_realized_move_pct": 0.0356,
+          "mean_future_max_gap_pct": 0.0152
+        },
+        "research_gate_passed": false
+      },
+      "overnight_gap_risk": {
+        "elevated": {
+          "observations": 319,
+          "terminal_coverage": 0.884,
+          "path_coverage": 0.768,
+          "mean_realized_move_pct": 0.0596,
+          "mean_future_max_gap_pct": 0.0314
+        },
+        "ordinary": {
+          "observations": 3770,
+          "terminal_coverage": 0.8149,
+          "path_coverage": 0.661,
+          "mean_realized_move_pct": 0.0321,
+          "mean_future_max_gap_pct": 0.0165
+        },
+        "research_gate_passed": true
+      },
+      "promotion_gate_passed": false,
+      "execution_eligible": false
+    },
+    "holdout": {
+      "thresholds": {
+        "high_directional_efficiency": 0.25,
+        "expanded_volatility_ratio": 1.2,
+        "compressed_volatility_ratio": 0.8,
+        "elevated_average_gap_pct": 0.015
+      },
+      "directional_efficiency": {
+        "high": {
+          "observations": 752,
+          "directional_hit_rate": 0.4814,
+          "mean_signed_return_pct": -0.0037,
+          "mean_absolute_return_pct": 0.035
+        },
+        "weak_or_choppy": {
+          "observations": 1108,
+          "directional_hit_rate": 0.5063,
+          "mean_signed_return_pct": 0.0013,
+          "mean_absolute_return_pct": 0.0345
+        },
+        "research_gate_passed": false
+      },
+      "volatility_expansion": {
+        "expanded": {
+          "observations": 314,
+          "terminal_coverage": 0.9204,
+          "path_coverage": 0.8217,
+          "mean_realized_move_pct": 0.0392,
+          "mean_future_max_gap_pct": 0.0214
+        },
+        "normal": {
+          "observations": 1290,
+          "terminal_coverage": 0.8357,
+          "path_coverage": 0.6721,
+          "mean_realized_move_pct": 0.0337,
+          "mean_future_max_gap_pct": 0.0189
+        },
+        "compressed": {
+          "observations": 257,
+          "terminal_coverage": 0.7938,
+          "path_coverage": 0.607,
+          "mean_realized_move_pct": 0.0336,
+          "mean_future_max_gap_pct": 0.0172
+        },
+        "research_gate_passed": true
+      },
+      "overnight_gap_risk": {
+        "elevated": {
+          "observations": 208,
+          "terminal_coverage": 0.8942,
+          "path_coverage": 0.7452,
+          "mean_realized_move_pct": 0.0603,
+          "mean_future_max_gap_pct": 0.0381
+        },
+        "ordinary": {
+          "observations": 1653,
+          "terminal_coverage": 0.8379,
+          "path_coverage": 0.6812,
+          "mean_realized_move_pct": 0.0314,
+          "mean_future_max_gap_pct": 0.0167
+        },
+        "research_gate_passed": true
+      },
+      "promotion_gate_passed": false,
+      "execution_eligible": false
+    }
+  },
   "calibration_gate_passed": true,
   "execution_eligible": false,
   "limitations": [
@@ -35,9 +169,10 @@
     "Cross-sectional observations share market regimes and are not independent.",
     "Corporate events are not separated from ordinary sessions.",
     "The range remains display-only; it cannot authorize paper execution.",
+    "Indicator cohorts are observational research and do not change scanner conviction, council votes, risk approval, or order eligibility.",
     "Past calibration does not predict future coverage."
   ],
-  "generated_at": "2026-09-11T09:48:16.271311+00:00",
+  "generated_at": "2026-09-11T10:18:02.655972+00:00",
   "source": "Alpaca IEX fully adjusted daily bars",
   "history": {
     "calendar_days_requested": 1825,

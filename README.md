@@ -316,6 +316,13 @@ The latest 30% chronological holdout contains 1,861 non-overlapping windows.
 The displayed range contained the five-session closing price 84.42% of the time
 and the entire five-session high/low path 68.83% of the time. The calibration
 gate passed, but the result remains display-only and cannot authorize execution.
+The same walk-forward run tested the three research gauges before promotion.
+Directional efficiency failed holdout (48.14% continuation hit rate and -0.37%
+mean signed return), while volatility expansion was mixed across train and
+holdout. Average overnight-gap risk held up: the elevated cohort's next
+five-session maximum gap averaged 3.81% versus 1.67% for the ordinary cohort.
+Accordingly, efficiency and expansion remain neutral diagnostics; only gap risk
+is labeled as a validated warning, and none can vote or authorize an order.
 
 Reproduce the intraday validation with:
 
