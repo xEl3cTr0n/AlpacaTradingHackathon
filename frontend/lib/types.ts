@@ -356,8 +356,12 @@ export interface ScannerCandidate {
     upper_bound: number;
     atr_14: number;
     realized_vol_move_pct: number;
+    directional_efficiency_20d: number;
+    volatility_expansion_ratio: number;
+    average_gap_pct_20d: number;
     direction_score: number;
     move_confidence: number;
+    research_only: true;
     trigger: string;
     target: string;
     invalidation: string;

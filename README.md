@@ -25,7 +25,9 @@ specialized evidence agents, a hard risk gate, and an operator dashboard.
   strength, and volume.
 - An inspectable five-session potential-move thesis for every scanner row with
   separate range and direction scores, trigger, target, invalidation, support,
-  conflict, and source methodology.
+  conflict, and source methodology. Research-only trend-efficiency,
+  volatility-expansion, and overnight-gap gauges add context without changing
+  a vote, risk decision, or execution eligibility.
 - On-demand Alpaca options confirmation for the lead setup: near-ATM IV expiry
   move, call-plus-put midpoint, quote width, open interest, GEX regime, and walls.
 - Live Alpaca-only dashboard data with an explicit unavailable state; synthetic

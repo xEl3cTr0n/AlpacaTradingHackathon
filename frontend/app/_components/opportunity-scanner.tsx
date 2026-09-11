@@ -175,8 +175,11 @@ export function OpportunityScanner({
                 <span><Gauge size={14} /><b>±${lead.move_thesis.expected_move_dollars.toFixed(2)}</b><small>{(lead.move_thesis.expected_move_pct * 100).toFixed(1)}% expected</small></span>
                 <span><Target size={14} /><b>{lead.move_thesis.direction_score > 0 ? "+" : ""}{lead.move_thesis.direction_score.toFixed(0)}</b><small>direction score</small></span>
                 <span><CheckCircle2 size={14} /><b>{Math.round(lead.move_thesis.move_confidence * 100)}%</b><small>range confidence</small></span>
+                <span><ChartNoAxesCombined size={14} /><b>{lead.move_thesis.directional_efficiency_20d > 0 ? "+" : ""}{Math.round(lead.move_thesis.directional_efficiency_20d * 100)}%</b><small>trend efficiency</small></span>
+                <span><Gauge size={14} /><b>{lead.move_thesis.volatility_expansion_ratio.toFixed(2)}×</b><small>range expansion</small></span>
+                <span><TriangleAlert size={14} /><b>{(lead.move_thesis.average_gap_pct_20d * 100).toFixed(2)}%</b><small>average gap</small></span>
               </div>
-              <p className="move-basis">{lead.move_thesis.basis}</p>
+              <p className="move-basis">Research only · cannot authorize a trade. {lead.move_thesis.basis}</p>
               <button className="scanner-options-load" type="button" onClick={() => inspectOptions(lead)} disabled={isOptionsPending}>
                 <ChartNoAxesCombined size={14} aria-hidden="true" />
                 {isOptionsPending ? "Loading Alpaca options…" : optionsThesis?.underlying_symbol === lead.symbol ? "Refresh options context" : "Load options context"}

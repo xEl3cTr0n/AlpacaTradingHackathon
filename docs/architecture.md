@@ -7,7 +7,8 @@ MarketDataProvider
   -> Alpaca OHLCV chart history (1m / 5m / 15m / 1D)
   -> FRED real GDP + CPI -> TopDownMacroQuad (6-hour cache)
   -> LargeCapScanner (24 names, completed 15-minute 18 EMA cross + daily context + live age gate)
-  -> PotentialMoveThesis (5-session ATR / realized-vol range + signed direction evidence)
+  -> PotentialMoveThesis (5-session ATR / realized-vol range + signed direction evidence
+     + research-only trend efficiency / range expansion / overnight gap risk)
   -> PotentialMoveBacktester (non-overlapping 5-session chronological calibration)
   -> On-demand OptionsThesis (near-ATM IV / straddle context + GEX; read-only)
   -> Shared BacktestEvidence validator (dashboard + scheduled-worker fail-closed gates)

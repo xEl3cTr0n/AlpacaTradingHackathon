@@ -317,8 +317,12 @@ class PotentialMoveThesis(BaseModel):
     upper_bound: float = Field(gt=0)
     atr_14: float = Field(ge=0)
     realized_vol_move_pct: float = Field(ge=0)
+    directional_efficiency_20d: float = Field(ge=-1, le=1)
+    volatility_expansion_ratio: float = Field(ge=0)
+    average_gap_pct_20d: float = Field(ge=0)
     direction_score: float = Field(ge=-100, le=100)
     move_confidence: float = Field(ge=0, le=1)
+    research_only: bool = True
     trigger: str
     target: str
     invalidation: str

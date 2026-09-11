@@ -39,6 +39,8 @@ def test_move_magnitude_is_independent_from_direction() -> None:
     assert bullish.direction_score == 72
     assert bearish.direction_score == -72
     assert bullish.lower_bound < common["spot"] < bullish.upper_bound
+    assert bullish.directional_efficiency_20d == 1
+    assert bullish.research_only is True
 
 
 def test_move_thesis_exposes_trigger_target_invalidation_and_conflict() -> None:
@@ -59,3 +61,32 @@ def test_move_thesis_exposes_trigger_target_invalidation_and_conflict() -> None:
     assert thesis.invalidation
     assert thesis.conflicting_evidence
     assert "not an options-implied move" in thesis.basis
+
+
+def test_move_thesis_surfaces_chop_expansion_and_gap_risk_without_changing_direction() -> None:
+    points = _daily_points()
+    points[-1] = points[-1].model_copy(
+        update={
+            "open": points[-2].close * 1.03,
+            "high": points[-2].close * 1.05,
+            "low": points[-2].close * 0.98,
+            "close": points[-2].close * 0.99,
+        }
+    )
+    thesis = build_potential_move_thesis(
+        points,
+        spot=points[-1].close,
+        direction=Direction.BULLISH,
+        conviction=0.6,
+        ema_18=points[-1].close - 1,
+        rsi_14=55,
+        relative_strength=0.01,
+        volume_ratio=1.1,
+        market_aligned=True,
+    )
+
+    assert -1 <= thesis.directional_efficiency_20d <= 1
+    assert thesis.volatility_expansion_ratio > 0
+    assert thesis.average_gap_pct_20d > 0
+    assert thesis.direction_score == 60
+    assert thesis.research_only is True
