@@ -231,11 +231,16 @@ historical statistical range, not an options-implied move. Alpaca option IV,
 GEX, liquidity, and news join only during the deeper council review.
 
 The Scanner's **Load options context** control performs a read-only Alpaca
-request for the selected lead. It compares near-ATM IV and call-plus-put
+request for the selected setup. It compares near-ATM IV and call-plus-put
 midpoints, then shows quote quality and the GEX map. This context is structured
 evidence only: it cannot vote, size, or authorize a paper order. Quote provenance
 is labeled conservatively because accounts without OPRA may receive indicative
 Alpaca options snapshots.
+
+Every ranked row has a keyboard-accessible **Inspect** action, including
+watch-only rows. Selecting a row updates its statistical thesis and allows an
+on-demand options read. The separate council action remains disabled unless the
+scanner's deterministic entry gates pass.
 
 Run one scan and optional CLI dry-run:
 
