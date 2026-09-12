@@ -16,6 +16,8 @@ import {
 import { useState, useTransition } from "react";
 import type { CSSProperties } from "react";
 import { loadOptionsThesis, refreshScanner, runScannerAnalysis } from "@/app/actions";
+import { ScannerDiagnosticsPanel, ScannerFilterBar } from "./scanner-workbench";
+import { DEFAULT_FILTERS, filterCandidates } from "@/lib/scanner-filters";
 import type { DecisionSnapshot, OptionsThesisSnapshot, ScannerCandidate, ScannerSnapshot } from "@/lib/types";
 
 function patternLabel(pattern: ScannerCandidate["pattern"]): string {
@@ -39,10 +41,13 @@ function tradeLabel(candidate: ScannerCandidate, actionable: boolean): string {
 export function OpportunityScanner({
   initialScanner,
   onSnapshot,
+  onOpenManual,
 }: {
   initialScanner: ScannerSnapshot;
   onSnapshot: (snapshot: DecisionSnapshot) => void;
+  onOpenManual: (symbol: string) => void;
 }) {
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [scanner, setScanner] = useState(initialScanner);
   const [selectedSymbol, setSelectedSymbol] = useState(
     initialScanner.candidates[0]?.symbol ?? "",
@@ -106,9 +111,8 @@ export function OpportunityScanner({
     });
   }
 
-  const lead =
-    scanner.candidates.find((candidate) => candidate.symbol === selectedSymbol) ??
-    scanner.candidates[0];
+  const visible = filterCandidates(scanner.candidates, filters);
+  const lead = visible.find((candidate) => candidate.symbol === selectedSymbol) ?? visible[0];
   return (
     <div className="view-stack scanner-view">
       <header className="view-heading">
@@ -130,8 +134,11 @@ export function OpportunityScanner({
         <article><ShieldAlert size={18} aria-hidden="true" /><div><span>Intraday backtest</span><strong>{scanner.execution_gates?.intraday_exploration_backtest_passed ? "Exploration passed" : "Fail closed"}</strong><small>{scanner.execution_gates?.intraday_production_backtest_passed ? "production passed" : "production locked"} · runtime gates still apply</small></div></article>
       </section>
 
+      <ScannerFilterBar filters={filters} onChange={setFilters} matches={visible.length} total={scanner.candidates.length} />
+      {!visible.length && <section className="panel scanner-empty" role="status"><h2>No names match this scan</h2><p>Unavailable readings do not pass active filters. Try another preset or reset filters.</p><button type="button" onClick={() => setFilters(DEFAULT_FILTERS)}>Show all names</button></section>}
       {lead && (
         <>
+          <ScannerDiagnosticsPanel candidate={lead} lowVolFilter={filters.lowVolFilter} onOpenManual={onOpenManual} />
           <section className={`scanner-lead panel ${lead.actionable ? "actionable" : "watch"}`}>
             <div className="scanner-lead-copy">
               <p className="eyebrow">Selected setup · rank {lead.rank.toString().padStart(2, "0")}</p>
@@ -245,13 +252,14 @@ export function OpportunityScanner({
         <div className="table-scroll">
           <table className="scanner-table">
             <caption>Ranked large-cap 18 EMA scanner candidates</caption>
-            <thead><tr><th>Rank</th><th>Symbol / setup</th><th>Price vs 18 EMA</th><th>5-session move</th><th>Conviction</th><th>Relative strength</th><th>Volume</th><th>Liquidity</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Rank</th><th>Symbol / setup</th><th>Price vs 18 EMA</th><th>CHOP / daily R</th><th>5-session move</th><th>Conviction</th><th>Relative strength</th><th>Volume</th><th>Liquidity</th><th>Actions</th></tr></thead>
             <tbody>
-              {scanner.candidates.map((candidate) => (
-                <tr key={candidate.symbol} className={`${candidate.actionable ? "actionable-row" : ""} ${candidate.symbol === lead.symbol ? "selected-row" : ""}`.trim()}>
+              {visible.map((candidate) => (
+                <tr key={candidate.symbol} className={`${candidate.actionable ? "actionable-row" : ""} ${candidate.symbol === lead?.symbol ? "selected-row" : ""}`.trim()}>
                   <td><span className="scanner-rank">{candidate.rank.toString().padStart(2, "0")}</span></td>
                   <td><strong>{candidate.symbol}</strong><small>{patternLabel(candidate.pattern)} · {candidate.signal_tier}</small></td>
                   <td><strong>${candidate.current_price.toFixed(2)}</strong><small>EMA ${candidate.ema_18.toFixed(2)}</small></td>
+                  <td><strong>{candidate.diagnostics?.chop.value?.toFixed(1) ?? "—"} · {candidate.diagnostics?.chop.state ?? "unavailable"}</strong><small>R {candidate.diagnostics?.daily_r_factor?.score.toFixed(1) ?? "—"} · completed DAY</small></td>
                   <td><strong>±${candidate.move_thesis.expected_move_dollars.toFixed(2)}</strong><small>{candidate.move_thesis.lower_bound.toFixed(2)}–{candidate.move_thesis.upper_bound.toFixed(2)}</small></td>
                   <td><div className="mini-conviction"><span style={{ width: `${candidate.conviction * 100}%` }} /></div><small>{Math.round(candidate.conviction * 100)}%</small></td>
                   <td className={candidate.relative_strength_20d >= 0 ? "positive" : "negative"}>{candidate.relative_strength_20d >= 0 ? "+" : ""}{(candidate.relative_strength_20d * 100).toFixed(1)}%</td>
@@ -259,7 +267,7 @@ export function OpportunityScanner({
                   <td><span className={`liquidity-chip ${candidate.liquidity_tier}`}>{candidate.liquidity_tier.replace("_", " ")}</span><small>{compactDollars(candidate.average_dollar_volume)} / day</small></td>
                   <td>
                     <div className="scanner-row-actions">
-                      <button type="button" className="scanner-inspect" onClick={() => inspectCandidate(candidate)} aria-pressed={candidate.symbol === lead.symbol}>Inspect</button>
+                      <button type="button" className="scanner-inspect" onClick={() => inspectCandidate(candidate)} aria-pressed={candidate.symbol === lead?.symbol}>Inspect</button>
                       <button type="button" className="scanner-analyze" onClick={() => analyze(candidate)} disabled={isPending || !candidate.actionable} title={candidate.actionable ? "Send to the voting council" : "Waiting for a confirmed crossover"}>
                         {isPending && activeSymbol === candidate.symbol ? "Running…" : tradeLabel(candidate, candidate.actionable)}
                       </button>

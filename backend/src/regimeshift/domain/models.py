@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -352,6 +353,73 @@ class ScannerExecutionGates(BaseModel):
     details: list[str]
 
 
+class RFactorReading(BaseModel):
+    as_of: datetime
+    provisional: bool
+    score: float
+    relative_volume: float = Field(ge=0)
+    directional_volume: float
+    open_change_pct: float
+    momentum_pct: float
+    typical_price_distance_pct: float
+    bullish_match: bool
+    bearish_match: bool
+
+
+class ChopReading(BaseModel):
+    as_of: datetime | None = None
+    timeframe: str
+    value: float | None = Field(default=None, ge=0, le=100)
+    state: Literal["trend", "transition", "chop", "unavailable"] = "unavailable"
+
+
+class UnderlyingTradePlan(BaseModel):
+    side: Literal["call", "put"]
+    entry: float = Field(gt=0)
+    invalidation: float = Field(gt=0)
+    target_1: float = Field(gt=0)
+    target_2: float = Field(gt=0)
+    risk_per_share: float = Field(gt=0)
+    entry_valid_bars: int = 3
+    time_exit_bars: int = 8
+    state: Literal["wait_breakout", "wait_chop", "stale"]
+
+
+class VolumeRsiReading(BaseModel):
+    as_of: datetime
+    rsi: float = Field(ge=0, le=100)
+    volume_ratio: float = Field(ge=0)
+    atr_fraction: float = Field(ge=0)
+    low_volatility: bool
+    low_vol_filter_enabled: bool
+    raw_signal: Literal["overbought", "oversold", "none"]
+    quiet_signal: Literal["overbought", "oversold", "none"]
+    context: Literal[
+        "reversal_down", "reversal_up", "up_continuation", "down_continuation",
+        "extreme_watch", "none",
+    ]
+    event_at: datetime | None = None
+    event_age_bars: int | None = None
+
+
+class ScannerDiagnostics(BaseModel):
+    research_only: Literal[True] = True
+    evaluated_at: datetime
+    levels_as_of: datetime | None = None
+    levels_price: float | None = None
+    timeframe: str
+    stale: bool
+    daily_r_factor: RFactorReading | None = None
+    provisional_r_factor: RFactorReading | None = None
+    chop: ChopReading
+    daily_chop: ChopReading
+    volume_rsi: VolumeRsiReading | None = None
+    volume_rsi_low_vol_filtered: VolumeRsiReading | None = None
+    recent_rsi_events: list[VolumeRsiReading] = Field(default_factory=list)
+    plans: list[UnderlyingTradePlan] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class ScannerCandidate(BaseModel):
     rank: int = Field(ge=1)
     symbol: str
@@ -376,6 +444,7 @@ class ScannerCandidate(BaseModel):
     market_aligned: bool
     liquidity_tier: str
     move_thesis: PotentialMoveThesis
+    diagnostics: ScannerDiagnostics | None = None
     evidence: list[str]
 
 
@@ -479,6 +548,7 @@ class ChartSnapshot(BaseModel):
     generated_at: datetime
     source: str
     bars: list[PricePoint]
+    volume_rsi_signals: list[VolumeRsiReading] = Field(default_factory=list)
 
 
 class OptionChainContract(BaseModel):

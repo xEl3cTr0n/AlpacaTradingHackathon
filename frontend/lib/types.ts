@@ -258,6 +258,7 @@ export interface ChartSnapshot {
   generated_at: string;
   source: string;
   bars: PricePoint[];
+  volume_rsi_signals?: VolumeRsiReading[];
 }
 
 export interface OptionChainContract {
@@ -325,6 +326,68 @@ export interface EquityPoint {
   profit_loss: number;
 }
 
+export interface RFactorReading {
+  as_of: string;
+  provisional: boolean;
+  score: number;
+  relative_volume: number;
+  directional_volume: number;
+  open_change_pct: number;
+  momentum_pct: number;
+  typical_price_distance_pct: number;
+  bullish_match: boolean;
+  bearish_match: boolean;
+}
+
+export interface ChopReading {
+  as_of: string | null;
+  timeframe: string;
+  value: number | null;
+  state: "trend" | "transition" | "chop" | "unavailable";
+}
+
+export interface VolumeRsiReading {
+  as_of: string;
+  rsi: number;
+  volume_ratio: number;
+  atr_fraction: number;
+  low_volatility: boolean;
+  low_vol_filter_enabled: boolean;
+  raw_signal: "overbought" | "oversold" | "none";
+  quiet_signal: "overbought" | "oversold" | "none";
+  context: "reversal_down" | "reversal_up" | "up_continuation" | "down_continuation" | "extreme_watch" | "none";
+  event_at: string | null;
+  event_age_bars: number | null;
+}
+
+export interface ScannerDiagnostics {
+  research_only: true;
+  evaluated_at: string;
+  levels_as_of: string | null;
+  levels_price: number | null;
+  timeframe: string;
+  stale: boolean;
+  daily_r_factor: RFactorReading | null;
+  provisional_r_factor: RFactorReading | null;
+  chop: ChopReading;
+  daily_chop: ChopReading;
+  volume_rsi: VolumeRsiReading | null;
+  volume_rsi_low_vol_filtered: VolumeRsiReading | null;
+  recent_rsi_events: VolumeRsiReading[];
+  plans: Array<{
+    side: "call" | "put";
+    entry: number;
+    invalidation: number;
+    target_1: number;
+    target_2: number;
+    risk_per_share: number;
+    entry_valid_bars: number;
+    time_exit_bars: number;
+    state: "wait_breakout" | "wait_chop" | "stale";
+  }>;
+  notes: string[];
+}
+
 export interface ScannerCandidate {
   rank: number;
   symbol: string;
@@ -348,6 +411,7 @@ export interface ScannerCandidate {
   average_dollar_volume: number;
   market_aligned: boolean;
   liquidity_tier: string;
+  diagnostics?: ScannerDiagnostics | null;
   move_thesis: {
     horizon_sessions: number;
     expected_move_dollars: number;

@@ -48,6 +48,7 @@ export function Dashboard({
 }) {
   const [view, setView] = useState<View>("portfolio");
   const [snapshot, setSnapshot] = useState(initialSnapshot);
+  const [manualSymbol, setManualSymbol] = useState(initialSnapshot.market.symbol);
   const accountPositive = initialPlatform.account.day_pnl >= 0;
 
   return (
@@ -90,10 +91,10 @@ export function Dashboard({
         </nav>
         <div className="platform-content" id="platform-content">
           {view === "portfolio" && <PortfolioView platform={initialPlatform} snapshot={snapshot} onOpenStrategy={() => setView("strategy")} />}
-          {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} />}
+          {view === "scanner" && <OpportunityScanner initialScanner={initialScanner} onSnapshot={(nextSnapshot) => { setSnapshot(nextSnapshot); setView("strategy"); }} onOpenManual={(symbol) => { setManualSymbol(symbol); setView("manual"); }} />}
           {view === "backtests" && <BacktestView />}
           {view === "strategy" && <StrategyLab snapshot={snapshot} onSnapshot={setSnapshot} />}
-          {view === "manual" && <ManualTradeTicket defaultSymbol={snapshot.market.symbol} />}
+          {view === "manual" && <ManualTradeTicket defaultSymbol={manualSymbol} />}
           {view === "ops" && <AgentOps platform={initialPlatform} snapshot={snapshot} />}
         </div>
         <footer className="platform-footer"><span><LockKeyhole size={12} aria-hidden="true" /> Paper environment</span><span><Braces size={12} aria-hidden="true" /> Decision {snapshot.decision_id.slice(0, 12)}</span><span><ChartNoAxesCombined size={12} aria-hidden="true" /> Not investment advice</span><span><CircleDollarSign size={12} aria-hidden="true" /> P&amp;L from {initialPlatform.mode}</span></footer>

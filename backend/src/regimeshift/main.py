@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -26,6 +26,8 @@ from regimeshift.domain.models import (
 )
 from regimeshift.domain.options_thesis import build_options_thesis
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
+from regimeshift.domain.scanner_diagnostics import NEW_YORK, aware
+from regimeshift.domain.volume_rsi import volume_rsi_series
 from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.live_tape import get_live_tick
 from regimeshift.services.manual_trading import ManualPaperTrader
@@ -128,6 +130,7 @@ def chart(
     symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
     timeframe: str = Query(default="5Min", pattern=r"^(1Min|5Min|15Min|1Day)$"),
     limit: int = Query(default=300, ge=50, le=500),
+    rsi_low_vol_filter: bool = False,
 ) -> ChartSnapshot:
     try:
         bars = build_market_data_provider(settings).get_chart_history(
@@ -140,12 +143,24 @@ def chart(
             if settings.market_data_mode.lower() == "alpaca"
             else f"deterministic {timeframe} demo bars"
         )
+        now = datetime.now(UTC)
+        if timeframe == "1Day":
+            completed_bars = [p for p in bars if aware(p.timestamp).astimezone(NEW_YORK).date()
+                              < now.astimezone(NEW_YORK).date()]
+        else:
+            duration = timedelta(minutes=int(timeframe.removesuffix("Min")))
+            completed_bars = [p for p in bars if aware(p.timestamp) + duration <= now]
+        readings = volume_rsi_series(completed_bars, use_low_vol_filter=rsi_low_vol_filter)
         return ChartSnapshot(
             symbol=symbol.upper(),
             timeframe=timeframe,
-            generated_at=datetime.now(UTC),
+            generated_at=now,
             source=source,
             bars=bars,
+            volume_rsi_signals=[r for r in readings if r is not None and (
+                r.raw_signal != "none" or r.quiet_signal != "none"
+                or r.context.startswith("reversal_")
+            )],
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

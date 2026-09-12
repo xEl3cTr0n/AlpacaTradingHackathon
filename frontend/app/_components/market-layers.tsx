@@ -14,14 +14,19 @@ const fetcher = async (url: string): Promise<LiveMarketTick> => {
 
 const pct = (value?: number | null) => value == null ? "N/A" : `${(value * 100).toFixed(1)}%`;
 const quad = (value: string) => value.replace("quad_", "Q").replace("unavailable", "N/A").toUpperCase();
+const TradingViewChart = dynamic(
+  () => import("@/app/_components/tradingview-chart").then((module) => module.TradingViewChart),
+  { ssr: false, loading: () => <div className="chart-placeholder">Loading TradingView…</div> },
+);
 const MarketChartTerminal = dynamic(
   () => import("@/app/_components/market-chart-terminal").then((module) => module.MarketChartTerminal),
-  { ssr: false, loading: () => <div className="chart-placeholder">Loading chart terminal…</div> },
+  { ssr: false, loading: () => <div className="chart-placeholder">Loading Alpaca indicator chart…</div> },
 );
 
 export function MarketLayers({ snapshot }: { snapshot: DecisionSnapshot }) {
   const [seconds, setSeconds] = useState(5);
   const [playing, setPlaying] = useState(true);
+  const [chartMode, setChartMode] = useState<"alpaca" | "tradingview">("alpaca");
   const key = `/api/v1/live-tape?symbol=${encodeURIComponent(snapshot.market.symbol)}`;
   const { data, error, isValidating, mutate } = useSWR(key, fetcher, {
     fallbackData: {
@@ -63,7 +68,8 @@ export function MarketLayers({ snapshot }: { snapshot: DecisionSnapshot }) {
         </div>
       </div>
       <div className="tape-meta"><span>Last tick {lastUpdate}</span><span>{data.bid && data.ask ? `Bid ${data.bid.toFixed(2)} · Ask ${data.ask.toFixed(2)}` : "Quote unavailable"}</span><span>{data.spread_bps == null ? "Spread N/A" : `Spread ${data.spread_bps.toFixed(1)} bps`}</span><span>{error ? "Feed retrying" : data.source}</span></div>
-      <MarketChartTerminal snapshot={snapshot} tick={data} />
+      <div className="range-tabs chart-provider-tabs" aria-label="Chart provider"><button type="button" className={chartMode === "alpaca" ? "active" : ""} aria-pressed={chartMode === "alpaca"} onClick={() => setChartMode("alpaca")}>Alpaca · custom indicators</button><button type="button" className={chartMode === "tradingview" ? "active" : ""} aria-pressed={chartMode === "tradingview"} onClick={() => setChartMode("tradingview")}>TradingView · external chart</button></div>
+      {chartMode === "alpaca" ? <MarketChartTerminal snapshot={snapshot} tick={data} quoteRefreshMs={playing ? seconds * 1000 : 0} /> : <TradingViewChart symbol={snapshot.market.symbol} />}
       <div className="layer-stack">
         <article className="market-layer macro-layer"><div className="layer-index">01</div><div className="layer-copy"><span>Top-down · GDP / CPI</span><h3>Macro {quad(macro.quadrant)}</h3><strong>{macro.label}</strong><p>{macro.rationale}</p></div><dl><div><dt>Real GDP YoY</dt><dd>{pct(macro.real_gdp_yoy)}</dd></div><div><dt>CPI YoY</dt><dd>{pct(macro.cpi_yoy)}</dd></div><div><dt>Cadence</dt><dd>6 hours</dd></div></dl></article>
         <div className="layer-connector" aria-hidden="true"><span /></div>

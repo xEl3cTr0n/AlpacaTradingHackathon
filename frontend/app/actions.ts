@@ -15,7 +15,7 @@ export async function runAnalysis(
 }
 
 export async function refreshScanner(): Promise<ScannerSnapshot> {
-  return fetchScanner(12);
+  return fetchScanner(24);
 }
 
 export async function loadOptionsThesis(symbol: string): Promise<OptionsThesisSnapshot> {

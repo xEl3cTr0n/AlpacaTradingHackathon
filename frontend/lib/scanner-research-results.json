@@ -1,0 +1,122 @@
+{
+  "research_only": true,
+  "execution_authorized": false,
+  "source": "Alpaca IEX fully adjusted daily bars",
+  "start": "2021-09-14T04:00:00+00:00",
+  "end": "2026-09-11T04:00:00+00:00",
+  "holdout_start": "2025-03-13T04:00:00+00:00",
+  "symbols": 24,
+  "session_count": 1254,
+  "signal_counts": {
+    "raw_rsi_alerts": 1118,
+    "quiet_rsi_alerts": 489,
+    "confirmed_reversals": 195
+  },
+  "variants": {
+    "r_factor": {
+      "train": {
+        "trades": 731,
+        "win_rate": 0.4843,
+        "mean_underlying_return": -0.002478,
+        "profit_factor": 0.8979,
+        "mean_r": -0.0326
+      },
+      "holdout": {
+        "trades": 329,
+        "win_rate": 0.4438,
+        "mean_underlying_return": -0.004448,
+        "profit_factor": 0.8252,
+        "mean_r": -0.0631
+      }
+    },
+    "r_factor_exclude_chop": {
+      "train": {
+        "trades": 700,
+        "win_rate": 0.4814,
+        "mean_underlying_return": -0.002983,
+        "profit_factor": 0.879,
+        "mean_r": -0.0411
+      },
+      "holdout": {
+        "trades": 317,
+        "win_rate": 0.429,
+        "mean_underlying_return": -0.006587,
+        "profit_factor": 0.7499,
+        "mean_r": -0.0971
+      }
+    },
+    "r_factor_trend_only": {
+      "train": {
+        "trades": 212,
+        "win_rate": 0.4717,
+        "mean_underlying_return": -0.005228,
+        "profit_factor": 0.8168,
+        "mean_r": -0.0475
+      },
+      "holdout": {
+        "trades": 96,
+        "win_rate": 0.3542,
+        "mean_underlying_return": -0.018347,
+        "profit_factor": 0.5288,
+        "mean_r": -0.2234
+      }
+    },
+    "rsi_raw_fade": {
+      "train": {
+        "trades": 365,
+        "win_rate": 0.4247,
+        "mean_underlying_return": -0.004477,
+        "profit_factor": 0.7671,
+        "mean_r": null
+      },
+      "holdout": {
+        "trades": 169,
+        "win_rate": 0.5858,
+        "mean_underlying_return": 0.011071,
+        "profit_factor": 1.6883,
+        "mean_r": null
+      }
+    },
+    "rsi_quiet_fade": {
+      "train": {
+        "trades": 322,
+        "win_rate": 0.4441,
+        "mean_underlying_return": -0.003117,
+        "profit_factor": 0.8291,
+        "mean_r": null
+      },
+      "holdout": {
+        "trades": 157,
+        "win_rate": 0.586,
+        "mean_underlying_return": 0.011595,
+        "profit_factor": 1.7038,
+        "mean_r": null
+      }
+    },
+    "rsi_confirmed_reversal": {
+      "train": {
+        "trades": 125,
+        "win_rate": 0.44,
+        "mean_underlying_return": -0.003416,
+        "profit_factor": 0.8199,
+        "mean_r": null
+      },
+      "holdout": {
+        "trades": 70,
+        "win_rate": 0.5143,
+        "mean_underlying_return": 0.000663,
+        "profit_factor": 1.0348,
+        "mean_r": null
+      }
+    }
+  },
+  "methodology": [
+    "Fixed thresholds before the run. Chronological 70/30 split; purge 11-bar cross-boundary windows. No overlapping observations per symbol per variant.",
+    "R-Factor: original >150 and mirrored <-150. Next 3 sessions may trigger 20-bar high/low +0.1 ATR breakout; initial stop capped to 2 ATR; full exit at 2R or after 8 bars. 1R is a displayed reference, not a partial fill. No gap chasing beyond 0.5R. Stop-first ambiguity; adverse stop gaps respected.",
+    "RSI event study: original, debounced and price-confirmed reversal events; contrarian entry at next open, exit on fifth session close. Low-vol filter OFF. Raw extrema are not claimed to be tops/bottoms. Reversal has up to 5-bar latency.",
+    "All returns deduct 10bps round trip underlying cost. No option chains, Greeks, IV decay, options spreads, portfolio allocation or borrow fees modelled. Not options P&L. Daily evidence cannot validate 15-minute entries.",
+    "Current large-cap universe has survivorship bias; IEX partial-market volume differs from consolidated feeds. This exploratory comparison is not a promotion gate."
+  ],
+  "generated_at": "2026-09-12T07:52:44.397757+00:00",
+  "calendar_days_requested": 1825
+}

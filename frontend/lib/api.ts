@@ -64,7 +64,7 @@ export async function fetchPlatform(): Promise<PlatformSnapshot> {
   return platform;
 }
 
-export async function fetchScanner(limit = 12): Promise<ScannerSnapshot> {
+export async function fetchScanner(limit = 24): Promise<ScannerSnapshot> {
   const response = await fetch(`${apiUrl}/api/v1/scanner?limit=${limit}`, {
     cache: "no-store",
     signal: AbortSignal.timeout(15_000),

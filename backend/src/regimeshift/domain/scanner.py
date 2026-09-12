@@ -10,6 +10,7 @@ from regimeshift.domain.models import (
     ScannerSnapshot,
 )
 from regimeshift.domain.potential_move import build_potential_move_thesis
+from regimeshift.domain.scanner_diagnostics import build_scanner_diagnostics
 
 LARGE_CAP_UNIVERSE: dict[str, str] = {
     "AAPL": "Apple",
@@ -149,6 +150,12 @@ class LargeCapScanner:
                     }
                 )
             if candidate is not None:
+                candidate = candidate.model_copy(update={
+                    "diagnostics": build_scanner_diagnostics(
+                        points, (liquidity_histories or histories).get(symbol, []),
+                        timeframe=timeframe, evaluation_time=effective_evaluation_time,
+                    ),
+                })
                 candidates.append(candidate)
 
         candidates.sort(
