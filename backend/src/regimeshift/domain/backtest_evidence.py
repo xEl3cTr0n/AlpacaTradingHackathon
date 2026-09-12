@@ -18,6 +18,8 @@ def validate_scanner_backtest_evidence(
     source: str = "committed backtest reports",
 ) -> ScannerExecutionGates:
     """Bind displayed and executable tier state to the same frozen evidence."""
+    if not isinstance(intraday_report, dict) or not isinstance(daily_report, dict):
+        raise ValueError("Backtest reports must be structured objects")
     scanner = LargeCapScanner()
     expected_intraday = {
         "ema_period": scanner.ema_period,
@@ -37,6 +39,13 @@ def validate_scanner_backtest_evidence(
         for key, value in expected_intraday.items()
         if intraday_parameters.get(key) != value
     ]
+    for label, report, fields in (
+        ("intraday", intraday_report, ("production_gate_passed", "exploration_gate_passed")),
+        ("daily", daily_report, ("production_gate_passed",)),
+    ):
+        for field in fields:
+            if not isinstance(report.get(field), bool):
+                problems.append(f"{label} {field}: requires an explicit boolean")
     if intraday_report.get("universe_size") != len(LARGE_CAP_UNIVERSE):
         problems.append("scanner universe changed after the intraday backtest")
     for key, value in {
@@ -57,9 +66,9 @@ def validate_scanner_backtest_evidence(
         if isinstance(raw_timestamp, str):
             timestamps.append(datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00")))
     evidence_as_of = max(timestamps) if timestamps else None
-    production = evidence_valid and bool(intraday_report.get("production_gate_passed"))
-    exploration = evidence_valid and bool(intraday_report.get("exploration_gate_passed"))
-    daily_production = evidence_valid and bool(daily_report.get("production_gate_passed"))
+    production = evidence_valid and intraday_report.get("production_gate_passed") is True
+    exploration = evidence_valid and intraday_report.get("exploration_gate_passed") is True
+    daily_production = evidence_valid and daily_report.get("production_gate_passed") is True
     details = problems or [
         f"Intraday production holdout: {'passed' if production else 'locked'}",
         f"Intraday exploration holdout: {'passed' if exploration else 'locked'}",
@@ -98,7 +107,7 @@ def load_scanner_backtest_evidence(root: Path | None = None) -> ScannerExecution
             daily_report,
             source=source,
         )
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, TypeError) as error:
         return ScannerExecutionGates(
             evidence_valid=False,
             source="Backtest evidence unavailable",

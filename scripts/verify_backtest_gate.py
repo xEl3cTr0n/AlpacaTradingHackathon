@@ -16,19 +16,17 @@ def main() -> int:
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
     gates = load_scanner_backtest_evidence(ROOT)
-    if not gates.evidence_valid:
-        print("Backtest gate closed: " + "; ".join(gates.details), file=sys.stderr)
-        return 2
-    production = gates.intraday_production_backtest_passed
-    exploration = gates.intraday_exploration_backtest_passed
-    daily_production = gates.daily_production_backtest_passed
+    production = gates.evidence_valid and gates.intraday_production_backtest_passed
+    exploration = gates.evidence_valid and gates.intraday_exploration_backtest_passed
+    daily_production = gates.evidence_valid and gates.daily_production_backtest_passed
     if args.github_output:
         with args.github_output.open("a", encoding="utf-8") as output:
             output.write(f"production_gate={'true' if production else 'false'}\n")
             output.write(f"exploration_gate={'true' if exploration else 'false'}\n")
-            output.write(
-                f"daily_production_gate={'true' if daily_production else 'false'}\n"
-            )
+            output.write(f"daily_production_gate={'true' if daily_production else 'false'}\n")
+    if not gates.evidence_valid:
+        print("Backtest gate closed: " + "; ".join(gates.details), file=sys.stderr)
+        return 2
     print(
         "Intraday backtest evidence valid. "
         f"Intraday production: {production}. Intraday exploration: {exploration}. "

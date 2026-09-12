@@ -412,44 +412,142 @@ class AlpacaCliAdapter:
     def managed_exit_plans(
         self, direction_by_symbol: dict[str, Direction] | None = None
     ) -> list[dict[str, Any]]:
+        return self.assess_managed_exits(direction_by_symbol)["plans"]
+
+    def assess_managed_exits(
+        self, direction_by_symbol: dict[str, Direction] | None = None
+    ) -> dict[str, Any]:
+        """Return explicit hold/reconciliation evidence as well as executable plans."""
+        positions = {
+            item["symbol"]: item
+            for item in self._run_list(["position", "list", "--quiet"])
+            if item.get("asset_class") in {"us_option", "us_index"}
+        }
+        if not positions:
+            return {"plans": [], "checks": []}
         entries = self._run_list(
             ["order", "list", "--status", "closed", "--nested", "--limit", "500", "--quiet"]
         )
         open_orders = self._run_list(
             ["order", "list", "--status", "open", "--nested", "--limit", "500", "--quiet"]
         )
-        positions = {
-            item["symbol"]: item
-            for item in self._run_list(["position", "list", "--quiet"])
-            if item.get("asset_class") in {"us_option", "us_index"}
+        if len(entries) >= 500 or len(open_orders) >= 500:
+            raise ValueError("Exit order history may be truncated; reconciliation required")
+        known_exits = {
+            str(order.get("client_order_id")): order
+            for order in [*entries, *open_orders]
+            if str(order.get("client_order_id", "")).startswith("regimeshift-exit-")
         }
-        open_client_ids = {str(item.get("client_order_id", "")) for item in open_orders}
-        plans: list[dict[str, Any]] = []
-        for entry in entries:
-            exit_client_id = f"regimeshift-exit-{str(entry.get('id', ''))[:32]}"
-            if exit_client_id in open_client_ids:
-                continue
-            underlying = ""
-            legs = entry.get("legs") or []
-            if legs:
-                symbol = str(legs[0].get("symbol", ""))
-                underlying = symbol[:-15].rstrip()
-            plan = managed_exit_plan(
-                entry,
-                positions,
-                current_direction=(direction_by_symbol or {}).get(underlying),
-                stop_loss_fraction=self.settings.stop_loss_fraction,
+        candidates = [
+            entry
+            for entry in entries
+            if (
+                entry.get("status") == "filled"
+                and entry.get("order_class") == "mleg"
+                and str(entry.get("client_order_id", "")).startswith(
+                    ("regimeshift-signal-", "regimeshift-manual-")
+                )
+                and any(leg.get("symbol") in positions for leg in (entry.get("legs") or []))
+                and known_exits.get(self.exit_client_order_id(str(entry.get("id", ""))), {}).get(
+                    "status"
+                )
+                != "filled"
             )
+        ]
+        plans: list[dict[str, Any]] = []
+        checks: list[dict[str, Any]] = []
+        for entry in candidates:
+            legs = entry.get("legs") or []
+            symbols = {str(leg.get("symbol", "")) for leg in legs}
+            underlying = self._option_root(str(legs[0].get("symbol", ""))) if legs else ""
+            exit_client_id = self.exit_client_order_id(str(entry.get("id", "")))
+            check = {"underlying_symbol": underlying, "status": "hold", "reasons": []}
+            try:
+                if not entry.get("id"):
+                    raise ValueError("Opening order identity could not be verified")
+                if exit_client_id in known_exits:
+                    raise ValueError("Existing exit needs reconciliation; never resubmit blindly")
+                if any(
+                    symbols & {str(leg.get("symbol", "")) for leg in (order.get("legs") or [order])}
+                    for order in open_orders
+                ):
+                    raise ValueError("Pending order touches held legs; wait for reconciliation")
+                if any(
+                    other is not entry
+                    and symbols & {str(leg.get("symbol", "")) for leg in (other.get("legs") or [])}
+                    for other in candidates
+                ):
+                    raise ValueError(
+                        "Multiple opening orders claim held legs; attribution is ambiguous"
+                    )
+                plan = managed_exit_plan(
+                    entry,
+                    positions,
+                    current_direction=(direction_by_symbol or {}).get(underlying),
+                    stop_loss_fraction=self.settings.stop_loss_fraction,
+                )
+            except ValueError as error:
+                check.update(status="reconciliation_required", reasons=[str(error)])
+                checks.append(check)
+                continue
             if plan is not None:
                 plan["client_order_id"] = exit_client_id
                 plans.append(plan)
-        return plans
+                check.update(status="exit_ready", reasons=plan["reasons"])
+            else:
+                check["reasons"] = ["No managed exit threshold reached"]
+            checks.append(check)
+        covered = {
+            str(leg.get("symbol", "")) for entry in candidates for leg in (entry.get("legs") or [])
+        }
+        if positions.keys() - covered:
+            checks.append(
+                {
+                    "underlying_symbol": None,
+                    "status": "unmanaged_positions",
+                    "reasons": [
+                        "Some held options have no attributable managed entry; "
+                        "operator review required"
+                    ],
+                }
+            )
+        return {"plans": plans, "checks": checks}
+
+    @staticmethod
+    def exit_client_order_id(entry_id: str) -> str:
+        return f"regimeshift-exit-{entry_id[:32]}"
 
     def submit_exit(self, plan: dict[str, Any], *, execute: bool) -> dict[str, Any]:
-        if not plan.get("paper_only") or len(plan.get("legs", [])) != 2:
+        if (
+            plan.get("paper_only") is not True
+            or not self.settings.alpaca_paper
+            or len(plan.get("legs", [])) != 2
+        ):
             raise ValueError("Managed exits require a complete paper-only two-leg spread")
         if execute and not self.settings.enable_paper_orders:
             raise ValueError("ENABLE_PAPER_ORDERS must be true for CLI submission")
+        entry_id = str(plan.get("entry_order_id", ""))
+        if not entry_id or plan.get("client_order_id") != self.exit_client_order_id(entry_id):
+            raise ValueError("Managed exit identity does not match its opening order")
+        if execute:
+            # Recheck actual holdings and thresholds, not caller-supplied P&L/reasons.
+            directions = {plan["underlying_symbol"]: plan.get("current_direction")}
+            fresh = self.assess_managed_exits(directions)
+            current = next(
+                (item for item in fresh["plans"] if item["entry_order_id"] == entry_id), None
+            )
+            if current is None:
+                raise ValueError("Managed exit is no longer eligible; inspect exit checks")
+            if (
+                current["legs"] != plan["legs"]
+                or current["quantity"] != plan["quantity"]
+                or current["underlying_symbol"] != plan.get("underlying_symbol")
+            ):
+                raise ValueError("Submitted closing legs do not match verified held spread")
+            if self.existing_order(plan["client_order_id"]) is not None:
+                raise ValueError("Exit client-order ID already exists; reconcile before retrying")
+            verify_open_clock(self._run(["clock", "--quiet"]))
+            plan = current
         arguments = [
             "order",
             "submit",

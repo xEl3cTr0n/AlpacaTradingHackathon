@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from regimeshift.domain.backtest_evidence import (
     load_scanner_backtest_evidence,
     scanner_tier_execution_allowed,
@@ -54,6 +55,24 @@ def test_policy_change_invalidates_every_execution_gate() -> None:
     assert gates.intraday_exploration_backtest_passed is False
     assert gates.daily_production_backtest_passed is False
     assert "expected 0.55" in gates.details[0]
+
+
+@pytest.mark.parametrize("value", ["false", "true", 1, 0, None, {}])
+def test_gate_fields_must_be_real_booleans(value):
+    intraday, daily = _reports()
+    intraday["exploration_gate_passed"] = value
+    gates = validate_scanner_backtest_evidence(intraday, daily)
+    assert not gates.evidence_valid
+    assert not gates.intraday_exploration_backtest_passed
+    assert not gates.daily_production_backtest_passed
+
+
+def test_wrong_json_root_fails_closed_instead_of_crashing_worker(tmp_path):
+    (tmp_path / "docs").mkdir()
+    for name in ("intraday-scanner-backtest-results.json", "scanner-backtest-results.json"):
+        (tmp_path / "docs" / name).write_text("[]")
+    gates = load_scanner_backtest_evidence(tmp_path)
+    assert not gates.evidence_valid and not gates.intraday_exploration_backtest_passed
 
 
 def test_packaged_deployment_evidence_is_valid() -> None:

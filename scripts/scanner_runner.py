@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ruff: noqa: BLE001
+# ruff: noqa: BLE001, E402
 """Scan liquid large caps and preview/submit the strongest gated paper trade."""
 
 import argparse
@@ -32,6 +32,35 @@ from regimeshift.services.alpaca_cli import AlpacaCliAdapter
 from regimeshift.services.market_data import AlpacaMarketDataProvider
 
 
+def run_managed_exits(cli, *, execute: bool, directions=None, exclude_entries=None):
+    """Risk exits run independently of scanner availability and entry eligibility."""
+    results, attempted = [], set()
+    try:
+        assessment = cli.assess_managed_exits(directions)
+    except Exception as error:
+        return {"results": [], "checks": [], "error": type(error).__name__}, attempted
+    for plan in assessment["plans"]:
+        if plan["entry_order_id"] in (exclude_entries or set()):
+            continue
+        attempted.add(plan["entry_order_id"])
+        receipt = {
+            "underlying_symbol": plan["underlying_symbol"],
+            "reasons": plan["reasons"],
+            "unrealized_pnl": plan["unrealized_pnl"],
+            "paper_only": True,
+        }
+        try:
+            result = cli.submit_exit(plan, execute=execute)
+            receipt["status"] = result["status"]
+        except ValueError as error:
+            receipt.update(status="exit_rejected", rejection_reason=str(error)[:300])
+        except Exception as error:
+            # An uncertain response must not trigger an immediate duplicate retry.
+            receipt.update(status="exit_response_unconfirmed", error_type=type(error).__name__)
+        results.append(receipt)
+    return {"results": results, "checks": assessment["checks"], "error": None}, attempted
+
+
 def run_cycle(
     settings: Settings,
     *,
@@ -40,61 +69,116 @@ def run_cycle(
     target_dte: int,
     submitted_signals: set[str],
     timeframe: str,
+    execute_exits: bool | None = None,
 ) -> dict[str, object]:
-    market_data = AlpacaMarketDataProvider(settings)
-    symbols = ["SPY", *LARGE_CAP_UNIVERSE]
-    if timeframe == "intraday":
-        histories = market_data.get_intraday_history(symbols, days=10, bar_minutes=15)
-        liquidity_histories = market_data.get_price_history(symbols, days=120)
-        scan = LargeCapScanner().scan(
-            histories,
-            limit=limit,
-            source="Alpaca IEX fully adjusted 15-minute bars",
-            timeframe="15Min",
-            liquidity_histories=liquidity_histories,
-            annualization_periods=252 * 26,
-            evaluation_time=datetime.now(UTC),
-        )
-    else:
-        histories = market_data.get_price_history(symbols, days=365)
-        scan = LargeCapScanner().scan(
-            histories,
-            limit=limit,
-            source="Alpaca IEX fully adjusted daily bars",
-            timeframe="1Day",
-        )
-    execution_gates = load_scanner_backtest_evidence(ROOT)
-    scan = scan.model_copy(update={"execution_gates": execution_gates})
+    exit_execution = execute if execute_exits is None else execute_exits
     summary: dict[str, object] = {
         "generated_at": datetime.now(UTC).isoformat(),
         "paper_only": True,
-        "scan": scan.model_dump(mode="json"),
         "execution": {"status": "no_trade", "reason": "No actionable setup"},
     }
     cli = AlpacaCliAdapter(settings)
-    verification: dict[str, object] | None = None
-    directions = {
-        candidate.symbol: candidate.direction for candidate in scan.candidates
-    }
-    exit_plans = cli.managed_exit_plans(directions)
-    exit_results: list[dict[str, object]] = []
-    if exit_plans:
-        verification = cli.verify()
-        market_open = bool(verification["clock"].get("is_open"))
-        for plan in exit_plans:
-            result = cli.submit_exit(plan, execute=execute and market_open)
-            exit_results.append(
-                {
-                    "underlying_symbol": plan["underlying_symbol"],
-                    "reasons": plan["reasons"],
-                    "unrealized_pnl": plan["unrealized_pnl"],
-                    "status": result["status"]
-                    if market_open or not execute
-                    else "market_closed",
-                    "paper_only": True,
-                }
+    exits, attempted = run_managed_exits(cli, execute=exit_execution)
+    summary["managed_exits"] = exits["results"]
+    summary["managed_exit_checks"] = exits["checks"]
+    if exits["error"]:
+        summary["execution"] = {
+            "status": "exit_check_failed",
+            "error_type": exits["error"],
+            "reason": "Managed exposure could not be inspected; new entries paused",
+        }
+        return summary
+    try:
+        market_data = AlpacaMarketDataProvider(settings)
+        symbols = ["SPY", *LARGE_CAP_UNIVERSE]
+        if timeframe == "intraday":
+            histories = market_data.get_intraday_history(symbols, days=10, bar_minutes=15)
+            liquidity_histories = market_data.get_price_history(symbols, days=120)
+            scan = LargeCapScanner().scan(
+                histories,
+                limit=limit,
+                source="Alpaca IEX fully adjusted 15-minute bars",
+                timeframe="15Min",
+                liquidity_histories=liquidity_histories,
+                annualization_periods=252 * 26,
+                evaluation_time=datetime.now(UTC),
             )
-    summary["managed_exits"] = exit_results
+        else:
+            histories = market_data.get_price_history(symbols, days=365)
+            scan = LargeCapScanner().scan(
+                histories,
+                limit=limit,
+                source="Alpaca IEX fully adjusted daily bars",
+                timeframe="1Day",
+            )
+    except Exception as error:
+        summary["execution"] = {
+            "status": "scanner_unavailable",
+            "error_type": type(error).__name__,
+            "reason": "Scanner failed after independent managed-exit checks; no new entry",
+        }
+        return summary
+    execution_gates = load_scanner_backtest_evidence(ROOT)
+    scan = scan.model_copy(update={"execution_gates": execution_gates})
+    summary["scan"] = scan.model_dump(mode="json")
+    directions = {
+        candidate.symbol: candidate.direction
+        for candidate in scan.candidates
+        if candidate.diagnostics is not None and not candidate.diagnostics.stale
+    }
+    if directions:
+        reversal_exits, _ = run_managed_exits(
+            cli,
+            execute=exit_execution,
+            directions=directions,
+            exclude_entries=attempted,
+        )
+        summary["managed_exits"].extend(reversal_exits["results"])
+        summary["managed_exit_checks"].extend(reversal_exits["checks"])
+        if reversal_exits["error"]:
+            summary["execution"] = {
+                "status": "exit_check_failed",
+                "error_type": reversal_exits["error"],
+                "reason": "Post-scan exit inspection failed; new entries paused",
+            }
+            return summary
+    try:
+        return run_entry_phase(
+            settings,
+            cli=cli,
+            market_data=market_data,
+            scan=scan,
+            execution_gates=execution_gates,
+            summary=summary,
+            execute=execute,
+            target_dte=target_dte,
+            submitted_signals=submitted_signals,
+        )
+    except Exception as error:
+        # Keep completed exit receipts even if later research, broker I/O, or
+        # local entry-state persistence fails. Never retry an uncertain submit here.
+        summary["execution"] = {
+            "status": "entry_phase_failed",
+            "error_type": type(error).__name__,
+            "reason": "Entry phase failed; reconcile broker before retrying "
+            "any attempted submission",
+        }
+        return summary
+
+
+def run_entry_phase(
+    settings,
+    *,
+    cli,
+    market_data,
+    scan,
+    execution_gates,
+    summary,
+    execute,
+    target_dte,
+    submitted_signals,
+):
+    verification: dict[str, object] | None = None
     candidates = [item for item in scan.candidates if item.actionable]
     if not candidates:
         return summary
@@ -128,9 +212,7 @@ def run_cycle(
                 instrument_mode=InstrumentMode.EQUITY_OPTION,
                 min_confidence=max(0.55, candidate.conviction),
                 target_dte=target_dte,
-                max_loss_cap_dollars=(
-                    candidate.risk_cap_dollars if exploration else None
-                ),
+                max_loss_cap_dollars=(candidate.risk_cap_dollars if exploration else None),
             ),
             scanner_signal=candidate,
             research_advice=research_advice,
@@ -160,8 +242,7 @@ def run_cycle(
 
         client_order_id = cli.signal_client_order_id(signal_key)
         if execute and (
-            signal_key in submitted_signals
-            or cli.existing_order(client_order_id) is not None
+            signal_key in submitted_signals or cli.existing_order(client_order_id) is not None
         ):
             evaluation["result"] = "duplicate_blocked"
             continue
@@ -193,8 +274,7 @@ def run_cycle(
         if result["status"] == "submitted":
             submitted_signals.add(signal_key)
             STATE_PATH.write_text(
-                json.dumps({"submitted_signals": sorted(submitted_signals)}, indent=2)
-                + "\n",
+                json.dumps({"submitted_signals": sorted(submitted_signals)}, indent=2) + "\n",
                 encoding="utf-8",
             )
         summary["decision"] = evaluation
@@ -218,6 +298,11 @@ def run_cycle(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--execute-exits",
+        action="store_true",
+        help="Execute eligible managed paper exits even when new entries are preview-only",
+    )
     parser.add_argument("--loop", action="store_true")
     parser.add_argument(
         "--market-session",
@@ -228,9 +313,7 @@ def main() -> int:
     parser.add_argument("--interval-minutes", type=int, default=15)
     parser.add_argument("--limit", type=int, default=12)
     parser.add_argument("--target-dte", type=int, default=30)
-    parser.add_argument(
-        "--timeframe", choices=("intraday", "daily"), default="intraday"
-    )
+    parser.add_argument("--timeframe", choices=("intraday", "daily"), default="intraday")
     args = parser.parse_args()
     if not 5 <= args.interval_minutes <= 240:
         parser.error("--interval-minutes must be between 5 and 240")
@@ -240,6 +323,7 @@ def main() -> int:
         parser.error("--max-cycles cannot be negative")
 
     settings = Settings(market_data_mode="alpaca", alpaca_cli_enabled=True)
+    entry_execution = args.execute
     submitted_signals: set[str] = set()
     if STATE_PATH.is_file():
         try:
@@ -248,10 +332,11 @@ def main() -> int:
         except (json.JSONDecodeError, OSError, AttributeError):
             if args.execute:
                 print(
-                    "Scanner state is unreadable; refusing paper execution.",
+                    "Scanner state is unreadable; new entries disabled, "
+                    "managed exits remain eligible.",
                     file=sys.stderr,
                 )
-                return 1
+                entry_execution = False
     completed_cycles = 0
     while True:
         if args.market_session:
@@ -285,7 +370,8 @@ def main() -> int:
                                 "paper_only": True,
                                 "execution": {
                                     "status": "market_closed",
-                                    "reason": "Next paper session opens on another date; worker stopped",
+                                    "reason": "Next paper session opens on another date; "
+                                    "worker stopped",
                                 },
                             },
                             indent=2,
@@ -312,7 +398,8 @@ def main() -> int:
         try:
             report = run_cycle(
                 settings,
-                execute=args.execute,
+                execute=entry_execution,
+                execute_exits=args.execute or args.execute_exits,
                 limit=args.limit,
                 target_dte=args.target_dte,
                 submitted_signals=submitted_signals,

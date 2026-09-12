@@ -53,8 +53,7 @@ jobs:
           fi
           python -m pip install --disable-pip-version-check -e "$backend_target"
           scripts/install-alpaca-cli.sh
-      - name: Validate paper credentials and backtest evidence
-        id: backtest
+      - name: Validate paper credentials
         shell: bash
         run: |
           if [[ -z "$ALPACA_API_KEY" || -z "$ALPACA_SECRET_KEY" ]]; then
@@ -62,18 +61,26 @@ jobs:
             echo "Vercel environment variables are separate from GitHub repository secrets." >&2
             exit 2
           fi
-          python scripts/verify_backtest_gate.py --github-output "$GITHUB_OUTPUT"
+      - name: Validate entry backtest evidence
+        id: backtest
+        # Failed evidence closes entries, but must not disable held-position exits.
+        continue-on-error: true
+        run: python scripts/verify_backtest_gate.py --github-output "$GITHUB_OUTPUT"
       - name: Run gated paper session
         shell: bash
         run: |
           set -o pipefail
+          exit_arguments=()
+          if [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
+            exit_arguments+=(--execute-exits)
+          fi
           daily_arguments=(--timeframe daily --loop --market-session --max-cycles 1 --interval-minutes 5)
           if [[ "$ENABLE_PAPER_ORDERS" == "true" && "${{ steps.backtest.outputs.daily_production_gate }}" == "true" ]]; then
             daily_arguments+=(--execute)
           elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
             echo "Daily paper entry remains preview-only because its holdout gate failed."
           fi
-          python scripts/scanner_runner.py "${daily_arguments[@]}" | tee daily-cycle.log
+          python scripts/scanner_runner.py "${daily_arguments[@]}" "${exit_arguments[@]}" | tee daily-cycle.log
 
           intraday_arguments=(--timeframe intraday --loop --market-session --max-cycles 68 --interval-minutes 5)
           if [[ "$ENABLE_PAPER_ORDERS" == "true" && "$ENABLE_EXPLORATION_ORDERS" == "true" && "${{ steps.backtest.outputs.exploration_gate }}" == "true" ]]; then
@@ -81,7 +88,7 @@ jobs:
           elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
             echo "Intraday paper entry remains preview-only because its exploration gate or repository switch is closed."
           fi
-          python scripts/scanner_runner.py "${intraday_arguments[@]}" | tee intraday-cycles.log
+          python scripts/scanner_runner.py "${intraday_arguments[@]}" "${exit_arguments[@]}" | tee intraday-cycles.log
       - name: Upload inspectable decision receipt
         if: always()
         uses: actions/upload-artifact@v4
