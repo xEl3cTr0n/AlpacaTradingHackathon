@@ -68,6 +68,7 @@ def health(settings: SettingsDependency) -> dict[str, str | bool]:
         "mode": settings.market_data_mode,
         "alpaca_configured": settings.alpaca_configured,
         "paper_orders_enabled": settings.enable_paper_orders,
+        "paper_experiment_enabled": settings.paper_experiment_mode and settings.alpaca_paper,
         "manual_paper_orders_enabled": settings.manual_trading_configured,
     }
 
@@ -145,8 +146,11 @@ def chart(
         )
         now = datetime.now(UTC)
         if timeframe == "1Day":
-            completed_bars = [p for p in bars if aware(p.timestamp).astimezone(NEW_YORK).date()
-                              < now.astimezone(NEW_YORK).date()]
+            completed_bars = [
+                p
+                for p in bars
+                if aware(p.timestamp).astimezone(NEW_YORK).date() < now.astimezone(NEW_YORK).date()
+            ]
         else:
             duration = timedelta(minutes=int(timeframe.removesuffix("Min")))
             completed_bars = [p for p in bars if aware(p.timestamp) + duration <= now]
@@ -157,10 +161,16 @@ def chart(
             generated_at=now,
             source=source,
             bars=bars,
-            volume_rsi_signals=[r for r in readings if r is not None and (
-                r.raw_signal != "none" or r.quiet_signal != "none"
-                or r.context.startswith("reversal_")
-            )],
+            volume_rsi_signals=[
+                r
+                for r in readings
+                if r is not None
+                and (
+                    r.raw_signal != "none"
+                    or r.quiet_signal != "none"
+                    or r.context.startswith("reversal_")
+                )
+            ],
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -249,7 +259,12 @@ def _build_scanner_snapshot(
         annualization_periods=252 * 26,
         evaluation_time=datetime.now(UTC),
     )
-    return snapshot.model_copy(update={"execution_gates": load_scanner_backtest_evidence()})
+    gates = load_scanner_backtest_evidence().model_copy(
+        update={
+            "paper_experiment_enabled": settings.paper_experiment_mode and settings.alpaca_paper
+        }
+    )
+    return snapshot.model_copy(update={"execution_gates": gates})
 
 
 @app.get("/api/v1/scanner/evaluate", response_model=DecisionSnapshot)

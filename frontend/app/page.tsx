@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const [snapshot, platform, scanner] = await Promise.all([
     fetchSnapshot("SPY"),
-    fetchPlatform(),
+    // An account endpoint outage should not hide read-only market research.
+    fetchPlatform().catch(() => null),
     fetchScanner(),
   ]);
   return (

@@ -3,11 +3,13 @@ import os
 import subprocess
 import sys
 import textwrap
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from regimeshift.config import Settings
+from regimeshift.domain.backtest_evidence import load_scanner_backtest_evidence
 
 
 @pytest.fixture
@@ -112,7 +114,9 @@ def test_invalid_backtest_evidence_cannot_disable_exit_phase(runner, monkeypatch
         runner, "LargeCapScanner", lambda: SimpleNamespace(scan=lambda *a, **k: scan)
     )
     monkeypatch.setattr(
-        runner, "load_scanner_backtest_evidence", lambda root: SimpleNamespace(evidence_valid=False)
+        runner,
+        "load_scanner_backtest_evidence",
+        lambda root: load_scanner_backtest_evidence().model_copy(update={"evidence_valid": False}),
     )
     result = runner.run_cycle(
         Settings(),
@@ -189,6 +193,49 @@ def test_workflow_keeps_exit_flag_outside_entry_gate_conditions():
     assert '"${intraday_arguments[@]}" "${exit_arguments[@]}"' in workflow
 
 
+@pytest.mark.parametrize("risk_approved,council_approved", [(False, True), (True, False)])
+def test_open_paper_experiment_cannot_override_risk_or_council(
+    runner, monkeypatch, risk_approved, council_approved
+):
+    candidate = SimpleNamespace(
+        symbol="AAPL",
+        actionable=True,
+        as_of=datetime.now(UTC),
+        pattern=SimpleNamespace(value="bullish_18ema_cross"),
+        signal_tier="production",
+        conviction=0.65,
+    )
+    decision = SimpleNamespace(
+        decision_id="test-decision",
+        council=SimpleNamespace(approved=council_approved, support_count=5),
+        risk=SimpleNamespace(approved=risk_approved, max_allowed_loss=1000),
+        strategy=SimpleNamespace(display_name="call debit spread"),
+    )
+    monkeypatch.setattr(
+        runner, "DecisionPipeline", lambda *args: SimpleNamespace(analyze=lambda *a, **k: decision)
+    )
+    gates = load_scanner_backtest_evidence().model_copy(update={"paper_experiment_enabled": True})
+    result = runner.run_entry_phase(
+        Settings(
+            enable_paper_orders=True, paper_experiment_mode=True, enable_gpt_mcp_research=False
+        ),
+        cli=SimpleNamespace(),  # Any broker attempt raises: veto must stop beforehand.
+        market_data=None,
+        scan=SimpleNamespace(candidates=[candidate], timeframe="15Min"),
+        execution_gates=gates,
+        summary={"execution": {"status": "no_trade"}},
+        execute=True,
+        target_dte=30,
+        submitted_signals=set(),
+    )
+    assert result["execution"]["status"] == "no_trade"
+    evaluation = result["evaluations"][0]
+    assert evaluation["entry_policy_open"] and evaluation["paper_experiment"]
+    assert evaluation["risk_approved"] is risk_approved
+    assert evaluation["council_approved"] is council_approved
+
+
+@pytest.mark.parametrize("experiment", ["true", "false"])
 @pytest.mark.parametrize(
     "paper,gates,exploration",
     [
@@ -199,14 +246,14 @@ def test_workflow_keeps_exit_flag_outside_entry_gate_conditions():
     ],
 )
 def test_actual_workflow_shell_keeps_exit_execution_independent(
-    tmp_path, paper, gates, exploration
+    tmp_path, paper, gates, exploration, experiment
 ):
     workflow = (
         Path(__file__).resolve().parents[2] / ".github/workflows/paper-trading.yml"
     ).read_text()
     block = workflow.split("- name: Run gated paper session", 1)[1].split("run: |\n", 1)[1]
     script = textwrap.dedent(block.split("      - name:", 1)[0])
-    for field in ("daily_production_gate", "exploration_gate"):
+    for field in ("daily_production_gate", "exploration_gate", "production_gate"):
         script = script.replace("${{ steps.backtest.outputs." + field + " }}", gates)
     binary_dir = tmp_path / "bin"
     binary_dir.mkdir()
@@ -224,6 +271,7 @@ def test_actual_workflow_shell_keeps_exit_execution_independent(
             "PATH": str(binary_dir) + os.pathsep + os.environ["PATH"],
             "ENABLE_PAPER_ORDERS": paper,
             "ENABLE_EXPLORATION_ORDERS": exploration,
+            "PAPER_EXPERIMENT_MODE": experiment,
             "TEST_WORKER_ARGUMENTS": str(record),
         },
         timeout=10,
@@ -233,8 +281,10 @@ def test_actual_workflow_shell_keeps_exit_execution_independent(
     daily, intraday = [line.split() for line in record.read_text().splitlines()]
     assert ("--execute-exits" in daily) == (paper == "true")
     assert ("--execute-exits" in intraday) == (paper == "true")
-    assert ("--execute" in daily) == (paper == gates == "true")
-    assert ("--execute" in intraday) == (paper == gates == exploration == "true")
+    assert ("--execute" in daily) == (paper == "true" and (experiment == "true" or gates == "true"))
+    assert ("--execute" in intraday) == (
+        paper == "true" and (experiment == "true" or gates == "true")
+    )
 
 
 def test_invalid_evidence_verifier_writes_closed_outputs_even_when_it_fails(monkeypatch, tmp_path):

@@ -476,6 +476,7 @@ export interface ScannerSnapshot {
     intraday_exploration_backtest_passed: boolean;
     daily_production_backtest_passed: boolean;
     paper_only: true;
+    paper_experiment_enabled?: boolean;
     details: string[];
   } | null;
 }

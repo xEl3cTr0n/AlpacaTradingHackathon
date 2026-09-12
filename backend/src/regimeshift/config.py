@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     alpaca_paper: bool = True
     enable_paper_orders: bool = False
     enable_exploration_orders: bool = False
+    # Explicit paper research policy: holdout evidence stays visible, not an
+    # execution prerequisite. Order switches and deterministic risk still apply.
+    paper_experiment_mode: bool = True
     enable_manual_paper_orders: bool = False
     manual_trade_token: SecretStr = SecretStr("")
     alpaca_mcp_enabled: bool = False

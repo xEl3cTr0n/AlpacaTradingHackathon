@@ -31,7 +31,7 @@ const chainFetcher = async (url: string): Promise<OptionChainSnapshot> => {
 const price = (value?: number | null) => value == null ? "—" : `$${value.toFixed(2)}`;
 const percent = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 
-export function ManualTradeTicket({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
+export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { defaultSymbol?: string; onSymbolChange?: (symbol: string) => void }) {
   const [draftSymbol, setDraftSymbol] = useState(defaultSymbol);
   const [underlying, setUnderlying] = useState(defaultSymbol);
   const [optionType, setOptionType] = useState<"call" | "put">("call");
@@ -81,6 +81,7 @@ export function ManualTradeTicket({ defaultSymbol = "SPY" }: { defaultSymbol?: s
     setExpiration("");
     resetLegs();
     setMessage(`Loading ${normalized} option contracts…`);
+    onSymbolChange?.(normalized);
   }
 
   function changeType(next: "call" | "put") {

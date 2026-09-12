@@ -117,3 +117,53 @@ def test_scanner_tier_gate_is_fail_closed_and_timeframe_specific() -> None:
         signal_tier="production",
         exploration_enabled=True,
     )[0]
+
+
+@pytest.mark.parametrize("valid", [True, False])
+@pytest.mark.parametrize(
+    "timeframe,tier", [("15Min", "production"), ("15Min", "exploration"), ("1Day", "production")]
+)
+def test_paper_experiment_opens_policy_without_falsifying_holdout(valid, timeframe, tier):
+    gates = load_scanner_backtest_evidence().model_copy(
+        update={
+            "paper_experiment_enabled": True,
+            "evidence_valid": valid,
+            "intraday_production_backtest_passed": False,
+            "intraday_exploration_backtest_passed": False,
+            "daily_production_backtest_passed": False,
+        }
+    )
+    before = gates.model_dump()
+    allowed, reason = scanner_tier_execution_allowed(
+        gates,
+        timeframe=timeframe,
+        signal_tier=tier,
+        exploration_enabled=True,
+    )
+    assert allowed and "Paper experiment" in reason
+    assert gates.model_dump() == before
+
+
+@pytest.mark.parametrize(
+    "updates,timeframe,tier,exploration",
+    [
+        ({"paper_only": False}, "15Min", "production", True),
+        ({}, "15Min", "watch", True),
+        ({}, "10Sec", "production", True),
+        ({}, "1Day", "exploration", True),
+        ({}, "15Min", "unknown", True),
+        ({}, "15Min", "exploration", False),
+    ],
+)
+def test_paper_experiment_does_not_open_unknown_or_disabled_policies(
+    updates, timeframe, tier, exploration
+):
+    gates = load_scanner_backtest_evidence().model_copy(
+        update={"paper_experiment_enabled": True, **updates}
+    )
+    assert not scanner_tier_execution_allowed(
+        gates,
+        timeframe=timeframe,
+        signal_tier=tier,
+        exploration_enabled=exploration,
+    )[0]

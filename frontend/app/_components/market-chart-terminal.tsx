@@ -5,14 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import type {
   IChartApi,
-  ISeriesApi,
+  LogicalRange,
   SeriesMarker,
   UTCTimestamp,
 } from "lightweight-charts";
 import type { ChartSnapshot, DecisionSnapshot, LiveMarketTick, PricePoint } from "@/lib/types";
 
 type Timeframe = ChartSnapshot["timeframe"];
-type CandleSeries = ISeriesApi<"Candlestick">;
 
 const timeframes: Timeframe[] = ["1Min", "5Min", "15Min", "1Day"];
 
@@ -40,33 +39,30 @@ function ema(points: PricePoint[], period: number) {
   });
 }
 
-function liveCandleTime(timestamp: string, timeframe: Timeframe): UTCTimestamp {
-  const seconds = Math.floor(new Date(timestamp).getTime() / 1000);
-  if (timeframe === "1Day") return (Math.floor(seconds / 86_400) * 86_400) as UTCTimestamp;
-  const interval = { "1Min": 60, "5Min": 300, "15Min": 900 }[timeframe];
-  return (Math.floor(seconds / interval) * interval) as UTCTimestamp;
-}
-
 export function MarketChartTerminal({
   snapshot,
   tick,
   quoteRefreshMs = 5000,
+  symbol,
+  onSymbolChange,
 }: {
   snapshot: DecisionSnapshot;
-  tick: LiveMarketTick;
+  tick?: LiveMarketTick;
   quoteRefreshMs?: number;
+  symbol?: string;
+  onSymbolChange?: (symbol: string) => void;
 }) {
   const [timeframe, setTimeframe] = useState<Timeframe>("5Min");
-  const [chartSymbol, setChartSymbol] = useState(snapshot.market.symbol);
-  const [draftSymbol, setDraftSymbol] = useState(snapshot.market.symbol);
+  const [localSymbol, setLocalSymbol] = useState(snapshot.market.symbol);
+  const chartSymbol = symbol ?? localSymbol;
+  const [renderError, setRenderError] = useState(false);
   const [rsiMode, setRsiMode] = useState<"off" | "raw" | "quiet" | "reversal">("quiet");
   const [rsiLowVolFilter, setRsiLowVolFilter] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candleRef = useRef<CandleSeries | null>(null);
-  const latestBarRef = useRef<PricePoint | null>(null);
+  const visibleRangeRef = useRef<{ key: string; range: LogicalRange } | null>(null);
   const key = `/api/v1/chart?symbol=${encodeURIComponent(chartSymbol)}&timeframe=${timeframe}&limit=300&rsi_low_vol_filter=${rsiLowVolFilter}`;
-  const { data, error, isLoading, isValidating } = useSWR(key, fetcher, {
+  const { data, error, isLoading, isValidating, mutate } = useSWR(key, fetcher, {
     refreshInterval: timeframe === "1Min" ? 30_000 : 60_000,
     dedupingInterval: 15_000,
     refreshWhenHidden: false,
@@ -74,8 +70,8 @@ export function MarketChartTerminal({
     keepPreviousData: false,
     errorRetryCount: 2,
   });
-  const liveKey = chartSymbol === snapshot.market.symbol ? null : `/api/v1/live-tape?symbol=${encodeURIComponent(chartSymbol)}`;
-  const { data: chartTick } = useSWR(liveKey, liveFetcher, {
+  const liveKey = tick?.symbol === chartSymbol ? null : `/api/v1/live-tape?symbol=${encodeURIComponent(chartSymbol)}`;
+  const { data: chartTick, error: tickError } = useSWR(liveKey, liveFetcher, {
     refreshInterval: quoteRefreshMs,
     dedupingInterval: Math.max(750, quoteRefreshMs * 0.8),
     refreshWhenHidden: false,
@@ -83,7 +79,7 @@ export function MarketChartTerminal({
     revalidateOnFocus: quoteRefreshMs > 0,
     errorRetryCount: 2,
   });
-  const activeTick = chartSymbol === snapshot.market.symbol ? tick : chartTick?.symbol === chartSymbol ? chartTick : undefined;
+  const activeTick = tick?.symbol === chartSymbol ? tick : chartTick?.symbol === chartSymbol ? chartTick : undefined;
   const bars = useMemo(
     () => data?.bars ?? (timeframe === "1Day" && chartSymbol === snapshot.market.symbol ? snapshot.market.prices : []),
     [data?.bars, snapshot.market.prices, snapshot.market.symbol, timeframe, chartSymbol],
@@ -102,11 +98,14 @@ export function MarketChartTerminal({
   useEffect(() => {
     if (!containerRef.current || !bars.length) return;
     let disposed = false;
+    let ownedChart: IChartApi | undefined;
     let resizeObserver: ResizeObserver | undefined;
+    const viewKey = `${chartSymbol}:${timeframe}`;
 
     void import("lightweight-charts").then(
       ({ CandlestickSeries, ColorType, HistogramSeries, LineSeries, LineStyle, createChart, createSeriesMarkers }) => {
         if (disposed || !containerRef.current) return;
+        setRenderError(false);
         const chart = createChart(containerRef.current, {
           autoSize: true,
           height: 430,
@@ -132,6 +131,7 @@ export function MarketChartTerminal({
             horzLine: { color: "rgba(148, 163, 184, .45)", labelBackgroundColor: "#26334c" },
           },
         });
+        ownedChart = chart;
         const candles = chart.addSeries(CandlestickSeries, {
           upColor: "#26a69a",
           downColor: "#ef5350",
@@ -202,52 +202,32 @@ export function MarketChartTerminal({
             if (price && price > 0) candles.createPriceLine({ price, color, lineStyle, lineWidth: 1, title });
           }
         }
-        chart.timeScale().fitContent();
+        const previousView = visibleRangeRef.current;
+        if (previousView?.key === viewKey) chart.timeScale().setVisibleLogicalRange(previousView.range);
+        else chart.timeScale().fitContent();
         chartRef.current = chart;
-        candleRef.current = candles;
-        latestBarRef.current = bars.at(-1) ?? null;
         resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: containerRef.current?.clientWidth }));
         resizeObserver.observe(containerRef.current);
       },
-    );
+    ).catch(() => { if (!disposed) setRenderError(true); });
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
-      chartRef.current?.remove();
-      chartRef.current = null;
-      candleRef.current = null;
+      const range = ownedChart?.timeScale().getVisibleLogicalRange();
+      if (range) visibleRangeRef.current = { key: viewKey, range };
+      ownedChart?.remove();
+      if (chartRef.current === ownedChart) chartRef.current = null;
     };
   }, [bars, chartSymbol, snapshot.market.symbol, snapshot.options_microstructure, snapshot.swing, timeframe, data?.volume_rsi_signals, rsiMode]);
 
-  useEffect(() => {
-    const series = candleRef.current;
-    const latestBar = latestBarRef.current;
-    if (!series || !latestBar || !activeTick) return;
-    const time = liveCandleTime(activeTick.as_of, timeframe);
-    const latestTime = toTime(latestBar.timestamp);
-    const candleTime = time < latestTime ? latestTime : time;
-    const startsNewCandle = candleTime > latestTime;
-    const nextBar: PricePoint = {
-      timestamp: new Date(candleTime * 1000).toISOString(),
-      open: startsNewCandle ? latestBar.close : (latestBar.open ?? latestBar.close),
-      high: startsNewCandle ? activeTick.price : Math.max(latestBar.high ?? latestBar.close, activeTick.price),
-      low: startsNewCandle ? activeTick.price : Math.min(latestBar.low ?? latestBar.close, activeTick.price),
-      close: activeTick.price,
-      volume: startsNewCandle ? 0 : latestBar.volume,
-    };
-    series.update({
-      time: candleTime,
-      open: nextBar.open ?? nextBar.close,
-      high: nextBar.high ?? nextBar.close,
-      low: nextBar.low ?? nextBar.close,
-      close: nextBar.close,
-    });
-    latestBarRef.current = nextBar;
-  }, [activeTick, timeframe]);
-
-  const submitSymbol = () => {
-    const normalized = draftSymbol.trim().toUpperCase();
-    if (/^[A-Z][A-Z0-9.-]{0,9}$/.test(normalized)) setChartSymbol(normalized);
+  // Display tape independently: quotes are not OHLC bars, and an old trade
+  // must never rewrite newer history or fabricate a daily/session candle.
+  const submitSymbol = (value: string) => {
+    const normalized = value.trim().toUpperCase();
+    if (/^[A-Z.]{1,10}$/.test(normalized)) {
+      setLocalSymbol(normalized);
+      onSymbolChange?.(normalized);
+    }
   };
 
   return (
@@ -257,15 +237,15 @@ export function MarketChartTerminal({
           <p className="eyebrow">Alpaca market data</p>
           <h3 id="market-chart-title">{chartSymbol} chart terminal</h3>
         </div>
-        <div className="chart-quote" aria-live="polite">
+        <div className="chart-quote">
           <strong>{activeTick ? `$${activeTick.price.toFixed(2)}` : "Loading quote…"}</strong>
           <span className={(activeTick?.day_change_pct ?? 0) >= 0 ? "positive" : "negative"}>
             {activeTick?.day_change_pct == null ? "—" : `${activeTick.day_change_pct >= 0 ? "+" : ""}${activeTick.day_change_pct.toFixed(2)}%`}
           </span>
         </div>
-        <form className="chart-symbol-search" onSubmit={(event) => { event.preventDefault(); submitSymbol(); }}>
+        <form key={chartSymbol} className="chart-symbol-search" onSubmit={(event) => { event.preventDefault(); submitSymbol(String(new FormData(event.currentTarget).get("ticker") ?? "")); }}>
           <label htmlFor="chart-symbol">Ticker</label>
-          <div><input id="chart-symbol" value={draftSymbol} onChange={(event) => setDraftSymbol(event.target.value.toUpperCase())} maxLength={10} spellCheck={false} aria-label="Search chart ticker" /><button type="submit" aria-label="Load ticker chart"><Search size={15} aria-hidden="true" /></button></div>
+          <div><input id="chart-symbol" name="ticker" defaultValue={chartSymbol} pattern="[A-Za-z.]{1,10}" required maxLength={10} spellCheck={false} aria-label="Search chart ticker" /><button type="submit" aria-label="Load ticker chart"><Search size={15} aria-hidden="true" /></button></div>
         </form>
         <div className="range-tabs" aria-label="Chart timeframe">
           {timeframes.map((item) => (
@@ -275,7 +255,7 @@ export function MarketChartTerminal({
           ))}
         </div>
       </div>
-      <div className="chart-rsi-controls"><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div>
+      <details className="chart-indicators"><summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {chartSymbol === snapshot.market.symbol ? "analysis levels" : "no matching analysis levels"}</summary><div className="chart-rsi-controls"><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div></details>
       <div className="chart-stat-strip">
         <span>O <b>{latest?.open?.toFixed(2) ?? "—"}</b></span>
         <span>H <b>{latest?.high?.toFixed(2) ?? "—"}</b></span>
@@ -286,11 +266,14 @@ export function MarketChartTerminal({
       </div>
       <div className="trading-chart-shell">
         {isLoading && !bars.length && <div className="chart-placeholder"><BarChart3 size={22} aria-hidden="true" /> Loading Alpaca bars…</div>}
-        {error && !bars.length && <div className="chart-placeholder negative">Chart feed unavailable.</div>}
+        {(error || renderError) && <div className="chart-feed-error" role="alert">{renderError ? "Chart renderer unavailable." : "Bar refresh failed; displayed history may be stale."} <button type="button" onClick={() => void mutate()}>Retry chart</button></div>}
+        {!isLoading && !error && !bars.length && <div className="chart-placeholder">No bars returned. Choose another ticker or timeframe.</div>}
         <div ref={containerRef} className="trading-chart" />
       </div>
       <div className="chart-terminal-foot">
         <span>{isValidating ? "Updating bars…" : data?.source ?? snapshot.market.source}</span>
+        <span>{tickError ? "Tape unavailable" : activeTick ? `Tape as of ${new Date(activeTick.as_of).toLocaleString()}` : "No tape yet"}</span>
+        <span>Quotes {quoteRefreshMs > 0 ? `${quoteRefreshMs / 1000}s` : "paused"} · bars {timeframe === "1Min" ? "30s" : "60s"}</span>
         <span>EMA 18 <i className="legend-cyan" /> EMA 50 <i className="legend-amber" /></span>
         <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a>
       </div>

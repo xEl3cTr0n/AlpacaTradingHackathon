@@ -125,11 +125,27 @@ def scanner_tier_execution_allowed(
     signal_tier: str,
     exploration_enabled: bool,
 ) -> tuple[bool, str]:
-    """Resolve one scanner tier against frozen evidence and runtime switches."""
-    if not gates.evidence_valid:
-        return False, "Backtest evidence is invalid or unavailable"
+    """Separate experimental paper authorization from claims about backtests."""
+    if not gates.paper_only:
+        return False, "Scanner execution is paper-only"
     if signal_tier == "watch":
         return False, "Watch signals are never execution eligible"
+    supported = (timeframe, signal_tier) in {
+        ("1Day", "production"),
+        ("15Min", "production"),
+        ("15Min", "exploration"),
+    }
+    if not supported:
+        return False, f"Unsupported scanner timeframe or tier: {timeframe}/{signal_tier}"
+    if signal_tier == "exploration" and not exploration_enabled:
+        return False, "Intraday exploration runtime switch is closed"
+    if gates.paper_experiment_enabled:
+        return True, (
+            "Paper experiment authorized; holdout not required or claimed passed. "
+            "Council, risk, liquidity, account, and market-clock gates still apply"
+        )
+    if not gates.evidence_valid:
+        return False, "Backtest evidence is invalid or unavailable"
     if timeframe == "1Day":
         if signal_tier != "production":
             return False, "Daily exploration has no validated execution policy"

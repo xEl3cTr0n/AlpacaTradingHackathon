@@ -40,7 +40,7 @@ export function MarketLayers({ snapshot }: { snapshot: DecisionSnapshot }) {
     dedupingInterval: Math.max(750, seconds * 800),
     refreshWhenHidden: false,
     refreshWhenOffline: false,
-    revalidateOnFocus: true,
+    revalidateOnFocus: playing,
     errorRetryCount: 2,
   });
   const lastUpdate = useMemo(
@@ -57,7 +57,7 @@ export function MarketLayers({ snapshot }: { snapshot: DecisionSnapshot }) {
       <div className="layers-toolbar">
         <div><p className="eyebrow">Three-layer regime stack</p><h2 id="market-layers-title">Market state engine</h2></div>
         <div className="live-tape" role="status" aria-atomic="true">
-          <span className={`live-indicator ${playing ? "running" : "paused"}`}><Radio size={13} aria-hidden="true" />{playing ? "Live" : "Paused"}</span>
+          <span className={`live-indicator ${playing ? "running" : "paused"}`}><Radio size={13} aria-hidden="true" />{error ? "Feed error" : playing ? "Polling" : "Paused"}</span>
           <strong>${data.price.toFixed(2)}</strong>
           <small className={(data.day_change_pct ?? 0) >= 0 ? "positive" : "negative"}>{data.day_change_pct == null ? "" : `${data.day_change_pct >= 0 ? "+" : ""}${data.day_change_pct.toFixed(2)}%`}</small>
         </div>

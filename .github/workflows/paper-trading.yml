@@ -32,9 +32,10 @@ jobs:
       STOP_LOSS_FRACTION: "0.50"
       MAX_DAILY_LOSS_PCT: "0.02"
       MAX_OPEN_SPREADS: "3"
-      # Explicitly enabled for this hackathon's dedicated paper account.
+      # User-authorized research on a dedicated paper account; never live.
       ENABLE_PAPER_ORDERS: "true"
       ENABLE_EXPLORATION_ORDERS: "true"
+      PAPER_EXPERIMENT_MODE: "true"
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-5-mini
       ENABLE_GPT_MCP_RESEARCH: ${{ vars.ENABLE_GPT_MCP_RESEARCH == 'true' && 'true' || 'false' }}
@@ -63,7 +64,8 @@ jobs:
           fi
       - name: Validate entry backtest evidence
         id: backtest
-        # Failed evidence closes entries, but must not disable held-position exits.
+        # Evidence remains honest. Paper experiments may proceed without a
+        # passing holdout; neither policy may disable held-position exits.
         continue-on-error: true
         run: python scripts/verify_backtest_gate.py --github-output "$GITHUB_OUTPUT"
       - name: Run gated paper session
@@ -75,7 +77,7 @@ jobs:
             exit_arguments+=(--execute-exits)
           fi
           daily_arguments=(--timeframe daily --loop --market-session --max-cycles 1 --interval-minutes 5)
-          if [[ "$ENABLE_PAPER_ORDERS" == "true" && "${{ steps.backtest.outputs.daily_production_gate }}" == "true" ]]; then
+          if [[ "$ENABLE_PAPER_ORDERS" == "true" && ( "$PAPER_EXPERIMENT_MODE" == "true" || "${{ steps.backtest.outputs.daily_production_gate }}" == "true" ) ]]; then
             daily_arguments+=(--execute)
           elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
             echo "Daily paper entry remains preview-only because its holdout gate failed."
@@ -83,7 +85,7 @@ jobs:
           python scripts/scanner_runner.py "${daily_arguments[@]}" "${exit_arguments[@]}" | tee daily-cycle.log
 
           intraday_arguments=(--timeframe intraday --loop --market-session --max-cycles 68 --interval-minutes 5)
-          if [[ "$ENABLE_PAPER_ORDERS" == "true" && "$ENABLE_EXPLORATION_ORDERS" == "true" && "${{ steps.backtest.outputs.exploration_gate }}" == "true" ]]; then
+          if [[ "$ENABLE_PAPER_ORDERS" == "true" && ( "$PAPER_EXPERIMENT_MODE" == "true" || "$ENABLE_EXPLORATION_ORDERS" == "true" && "${{ steps.backtest.outputs.exploration_gate }}" == "true" || "${{ steps.backtest.outputs.production_gate }}" == "true" ) ]]; then
             intraday_arguments+=(--execute)
           elif [[ "$ENABLE_PAPER_ORDERS" == "true" ]]; then
             echo "Intraday paper entry remains preview-only because its exploration gate or repository switch is closed."

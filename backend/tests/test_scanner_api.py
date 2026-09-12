@@ -9,6 +9,26 @@ from regimeshift.domain.models import PricePoint
 from regimeshift.domain.scanner import LargeCapScanner
 
 
+def test_api_exposes_paper_experiment_without_changing_holdout_evidence():
+    main_module.app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        market_data_mode="demo",
+        alpaca_api_key="",
+        alpaca_secret_key="",
+        paper_experiment_mode=True,
+        alpaca_paper=True,
+    )
+    try:
+        response = TestClient(main_module.app).get("/api/v1/scanner?limit=24")
+    finally:
+        main_module.app.dependency_overrides.clear()
+    assert response.status_code == 200
+    gates = response.json()["execution_gates"]
+    assert gates["paper_experiment_enabled"] is True
+    assert gates["intraday_production_backtest_passed"] is False
+    assert gates["evidence_valid"] is True
+
+
 def _points(closes: list[float], volume: int) -> list[PricePoint]:
     start = datetime(2025, 1, 2, tzinfo=UTC)
     return [

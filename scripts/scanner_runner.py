@@ -56,9 +56,15 @@ def run_managed_exits(cli, *, execute: bool, directions=None, exclude_entries=No
             receipt.update(status="exit_rejected", rejection_reason=str(error)[:300])
         except Exception as error:
             # An uncertain response must not trigger an immediate duplicate retry.
-            receipt.update(status="exit_response_unconfirmed", error_type=type(error).__name__)
+            receipt.update(
+                status="exit_response_unconfirmed", error_type=type(error).__name__
+            )
         results.append(receipt)
-    return {"results": results, "checks": assessment["checks"], "error": None}, attempted
+    return {
+        "results": results,
+        "checks": assessment["checks"],
+        "error": None,
+    }, attempted
 
 
 def run_cycle(
@@ -92,7 +98,9 @@ def run_cycle(
         market_data = AlpacaMarketDataProvider(settings)
         symbols = ["SPY", *LARGE_CAP_UNIVERSE]
         if timeframe == "intraday":
-            histories = market_data.get_intraday_history(symbols, days=10, bar_minutes=15)
+            histories = market_data.get_intraday_history(
+                symbols, days=10, bar_minutes=15
+            )
             liquidity_histories = market_data.get_price_history(symbols, days=120)
             scan = LargeCapScanner().scan(
                 histories,
@@ -118,7 +126,12 @@ def run_cycle(
             "reason": "Scanner failed after independent managed-exit checks; no new entry",
         }
         return summary
-    execution_gates = load_scanner_backtest_evidence(ROOT)
+    execution_gates = load_scanner_backtest_evidence(ROOT).model_copy(
+        update={
+            "paper_experiment_enabled": settings.paper_experiment_mode
+            and settings.alpaca_paper
+        }
+    )
     scan = scan.model_copy(update={"execution_gates": execution_gates})
     summary["scan"] = scan.model_dump(mode="json")
     directions = {
@@ -212,7 +225,9 @@ def run_entry_phase(
                 instrument_mode=InstrumentMode.EQUITY_OPTION,
                 min_confidence=max(0.55, candidate.conviction),
                 target_dte=target_dte,
-                max_loss_cap_dollars=(candidate.risk_cap_dollars if exploration else None),
+                max_loss_cap_dollars=(
+                    candidate.risk_cap_dollars if exploration else None
+                ),
             ),
             scanner_signal=candidate,
             research_advice=research_advice,
@@ -234,15 +249,17 @@ def run_entry_phase(
             signal_tier=candidate.signal_tier,
             exploration_enabled=settings.enable_exploration_orders,
         )
-        evaluation["backtest_gate_open"] = tier_allowed
-        evaluation["backtest_gate_reason"] = tier_reason
+        evaluation["entry_policy_open"] = tier_allowed
+        evaluation["entry_policy_reason"] = tier_reason
+        evaluation["paper_experiment"] = execution_gates.paper_experiment_enabled
         summary["evaluations"].append(evaluation)
         if not snapshot.council.approved or not snapshot.risk.approved:
             continue
 
         client_order_id = cli.signal_client_order_id(signal_key)
         if execute and (
-            signal_key in submitted_signals or cli.existing_order(client_order_id) is not None
+            signal_key in submitted_signals
+            or cli.existing_order(client_order_id) is not None
         ):
             evaluation["result"] = "duplicate_blocked"
             continue
@@ -274,7 +291,8 @@ def run_entry_phase(
         if result["status"] == "submitted":
             submitted_signals.add(signal_key)
             STATE_PATH.write_text(
-                json.dumps({"submitted_signals": sorted(submitted_signals)}, indent=2) + "\n",
+                json.dumps({"submitted_signals": sorted(submitted_signals)}, indent=2)
+                + "\n",
                 encoding="utf-8",
             )
         summary["decision"] = evaluation
@@ -313,7 +331,9 @@ def main() -> int:
     parser.add_argument("--interval-minutes", type=int, default=15)
     parser.add_argument("--limit", type=int, default=12)
     parser.add_argument("--target-dte", type=int, default=30)
-    parser.add_argument("--timeframe", choices=("intraday", "daily"), default="intraday")
+    parser.add_argument(
+        "--timeframe", choices=("intraday", "daily"), default="intraday"
+    )
     args = parser.parse_args()
     if not 5 <= args.interval_minutes <= 240:
         parser.error("--interval-minutes must be between 5 and 240")

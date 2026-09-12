@@ -131,7 +131,7 @@ export function OpportunityScanner({
         <article><Search size={18} aria-hidden="true" /><div><span>Universe</span><strong>{scanner.scanned_count}/{scanner.universe_size}</strong><small>large-cap names scanned</small></div></article>
         <article><Crosshair size={18} aria-hidden="true" /><div><span>Council-ready</span><strong>{scanner.actionable_count}</strong><small>$1,000 production · $500 exploration</small></div></article>
         <article><CheckCircle2 size={18} aria-hidden="true" /><div><span>Primary trigger</span><strong>{scanner.ema_period} EMA</strong><small>confirmed price crossover</small></div></article>
-        <article><ShieldAlert size={18} aria-hidden="true" /><div><span>Intraday backtest</span><strong>{scanner.execution_gates?.intraday_exploration_backtest_passed ? "Exploration passed" : "Fail closed"}</strong><small>{scanner.execution_gates?.intraday_production_backtest_passed ? "production passed" : "production locked"} · runtime gates still apply</small></div></article>
+        <article><ShieldAlert size={18} aria-hidden="true" /><div><span>Entry policy</span><strong>{scanner.execution_gates?.paper_experiment_enabled ? "Paper experiment" : "Holdout gated"}</strong><small>Production holdout: {scanner.execution_gates?.intraday_production_backtest_passed ? "passed" : "not passed"} · hard risk applies</small></div></article>
       </section>
 
       <ScannerFilterBar filters={filters} onChange={setFilters} matches={visible.length} total={scanner.candidates.length} />
@@ -244,7 +244,7 @@ export function OpportunityScanner({
         <div className="scanner-methodology">{scanner.methodology}</div>
         {scanner.execution_gates && (
           <div className={`scanner-gate-evidence ${scanner.execution_gates.evidence_valid ? "valid" : "invalid"}`}>
-            <strong>{scanner.execution_gates.evidence_valid ? "Backtest evidence verified" : "Backtest evidence invalid — all tiers locked"}</strong>
+            <strong>{scanner.execution_gates.paper_experiment_enabled ? "Paper experiment — holdout not required" : scanner.execution_gates.evidence_valid ? "Backtest evidence verified" : "Backtest evidence invalid — all tiers locked"}</strong>
             <span>{scanner.execution_gates.details.join(" · ")}</span>
           </div>
         )}

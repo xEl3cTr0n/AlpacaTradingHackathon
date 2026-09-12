@@ -350,6 +350,7 @@ class ScannerExecutionGates(BaseModel):
     intraday_exploration_backtest_passed: bool
     daily_production_backtest_passed: bool
     paper_only: bool = True
+    paper_experiment_enabled: bool = False
     details: list[str]
 
 
