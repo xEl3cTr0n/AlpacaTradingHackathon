@@ -1,5 +1,6 @@
-import pytest
+from datetime import UTC, datetime, timedelta
 
+import pytest
 from regimeshift.services.alpaca_cli import AlpacaCliAdapter
 
 
@@ -8,11 +9,23 @@ def chain(rows):
     snapshots = {}
     for strike, bid, ask, interest in rows:
         symbol = str(strike)
-        contracts.append({
-            "symbol": symbol, "strike_price": str(strike),
-            "expiration_date": "2026-10-16", "open_interest": interest,
-        })
-        snapshots[symbol] = {"latestQuote": {"bp": bid, "ap": ask, "bs": 10, "as": 10}}
+        contracts.append(
+            {
+                "symbol": symbol,
+                "strike_price": str(strike),
+                "expiration_date": "2026-10-16",
+                "open_interest": interest,
+            }
+        )
+        snapshots[symbol] = {
+            "latestQuote": {
+                "bp": bid,
+                "ap": ask,
+                "bs": 10,
+                "as": 10,
+                "t": datetime.now(UTC).isoformat(),
+            }
+        }
     return contracts, snapshots
 
 
@@ -45,3 +58,18 @@ def test_put_spread_has_lower_strike_short_leg():
 def test_crossed_quotes_cannot_supply_an_alternative_pair():
     with pytest.raises(ValueError, match="Fewer than two"):
         select([(100, 4, 3, 100), (102, 1.5, 1.6, 100)])
+
+
+def test_stale_atm_quote_is_skipped_in_favor_of_fresh_nearby_pair():
+    contracts, snapshots = chain([(100, 3, 3.1, 100), (101, 2, 2.1, 100), (103, 1, 1.1, 100)])
+    now = datetime.now(UTC)
+    snapshots["100"]["latestQuote"]["t"] = (now - timedelta(minutes=5)).isoformat()
+    long, short = AlpacaCliAdapter.select_spread_contracts(
+        contracts,
+        snapshots,
+        spot=100,
+        option_type="call",
+        risk_cap=500,
+        now=now,
+    )
+    assert (long["symbol"], short["symbol"]) == ("101", "103")

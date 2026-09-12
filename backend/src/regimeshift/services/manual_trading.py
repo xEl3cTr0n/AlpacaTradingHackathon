@@ -3,6 +3,11 @@ import secrets
 from datetime import UTC, datetime
 
 from regimeshift.config import Settings
+from regimeshift.domain.execution_checks import (
+    check_option_quote,
+    verify_entry_capacity,
+    verify_open_clock,
+)
 from regimeshift.domain.exits import option_contract_details
 from regimeshift.domain.models import (
     ManualTradePreview,
@@ -26,6 +31,32 @@ class ManualPaperTrader:
         self.settings = settings
         self.options = OptionHistoricalDataClient(settings.alpaca_api_key, secret)
         self.trading = TradingClient(settings.alpaca_api_key, secret, paper=True)
+
+    @staticmethod
+    def _record(value) -> dict:
+        return value if isinstance(value, dict) else value.model_dump(mode="json")
+
+    def verify_capacity(self, underlying: str, maximum_loss: float) -> dict:
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+
+        return verify_entry_capacity(
+            self.settings,
+            underlying,
+            self._record(self.trading.get_account()),
+            [self._record(p) for p in self.trading.get_all_positions()],
+            [
+                self._record(o)
+                for o in self.trading.get_orders(
+                    filter=GetOrdersRequest(
+                        status=QueryOrderStatus.OPEN,
+                        nested=True,
+                        limit=500,
+                    )
+                )
+            ],
+            maximum_loss=maximum_loss,
+        )
 
     def preview(self, request: ManualTradeRequest) -> ManualTradePreview:
         from alpaca.data.requests import OptionSnapshotRequest
@@ -54,12 +85,20 @@ class ManualPaperTrader:
             reasons.append("Limit debit must be below spread width")
         maximum_loss = round(request.limit_debit * 100 * request.quantity, 2)
         maximum_reward = round((width - request.limit_debit) * 100 * request.quantity, 2)
-        risk_budget = min(
-            self.settings.max_position_loss_dollars,
-            self.settings.account_equity * self.settings.max_risk_per_trade_pct,
-        )
-        if maximum_loss > risk_budget:
-            reasons.append(f"Maximum loss exceeds the ${risk_budget:,.0f} manual risk cap")
+        risk_budget = 0.0
+        capacity_passed = False
+        try:
+            capacity = self.verify_capacity(underlying, maximum_loss)
+            risk_budget = capacity["risk_budget"]
+            capacity_passed = True
+        except ValueError as error:
+            reasons.append(str(error))
+        market_open = False
+        try:
+            verify_open_clock(self._record(self.trading.get_clock()))
+            market_open = True
+        except ValueError as error:
+            reasons.append(str(error))
 
         snapshots = self.options.get_option_snapshot(
             OptionSnapshotRequest(symbol_or_symbols=[long_symbol, short_symbol])
@@ -69,32 +108,31 @@ class ManualPaperTrader:
             snapshots.get(short_symbol).latest_quote if snapshots.get(short_symbol) else None
         )
         market_debit = None
-        liquidity_passed = False
-        if long_quote and short_quote and long_quote.ask_price and short_quote.bid_price:
-            long_ask = float(long_quote.ask_price)
-            long_bid = float(long_quote.bid_price)
-            short_ask = float(short_quote.ask_price)
-            short_bid = float(short_quote.bid_price)
-            market_debit = round(max(0.01, long_ask - short_bid), 2)
-            long_mid = (long_ask + long_bid) / 2
-            short_mid = (short_ask + short_bid) / 2
-            long_spread = long_ask - long_bid
-            short_spread = short_ask - short_bid
-            liquidity_passed = (
-                long_mid > 0
-                and short_mid > 0
-                and long_spread / long_mid <= 0.20
-                and short_spread / short_mid <= 0.20
-                and market_debit < width
+        checked_at = datetime.now(UTC)
+        quote_checks = [
+            check_option_quote(
+                symbol,
+                bid=getattr(quote, "bid_price", None),
+                ask=getattr(quote, "ask_price", None),
+                bid_size=getattr(quote, "bid_size", None),
+                ask_size=getattr(quote, "ask_size", None),
+                timestamp=getattr(quote, "timestamp", None),
+                now=checked_at,
             )
-            if market_debit >= width:
+            for symbol, quote in ((long_symbol, long_quote), (short_symbol, short_quote))
+        ]
+        liquidity_passed = all(check.valid for check in quote_checks)
+        for check in quote_checks:
+            reasons.extend(f"{check.symbol}: {reason}" for reason in check.reasons)
+        if quote_checks[0].ask is not None and quote_checks[1].bid is not None:
+            natural = round(quote_checks[0].ask - quote_checks[1].bid, 2)
+            if not 0 < natural < width:
                 reasons.append("Current natural debit is invalid relative to spread width")
-            if request.limit_debit > market_debit * 1.10 + 0.05:
+                liquidity_passed = False
+            else:
+                market_debit = natural
+            if market_debit is not None and request.limit_debit > market_debit * 1.10 + 0.05:
                 reasons.append("Limit debit is more than 10% above the current natural debit")
-        else:
-            reasons.append("Both legs require live two-sided option quotes")
-        if not liquidity_passed:
-            reasons.append("Each leg must have a bid/ask spread no wider than 20% of midpoint")
 
         return ManualTradePreview(
             valid=not reasons,
@@ -107,13 +145,14 @@ class ManualPaperTrader:
             limit_debit=request.limit_debit,
             market_debit=market_debit,
             maximum_loss=maximum_loss,
-            stop_loss_dollars=round(
-                maximum_loss * self.settings.stop_loss_fraction, 2
-            ),
+            stop_loss_dollars=round(maximum_loss * self.settings.stop_loss_fraction, 2),
             stop_loss_fraction=self.settings.stop_loss_fraction,
             maximum_reward=max(0, maximum_reward),
             risk_budget=round(risk_budget, 2),
             liquidity_passed=liquidity_passed,
+            quote_checks=quote_checks,
+            capacity_passed=capacity_passed,
+            market_open=market_open,
             reasons=reasons
             or [
                 "Defined-risk structure and quote gates passed; maximum loss stays "
@@ -129,7 +168,9 @@ class ManualPaperTrader:
             raise PermissionError("Invalid operator token")
         preview = self.preview(request)
         if not preview.valid:
-            raise ValueError("Deterministic manual-order gates rejected the trade")
+            raise ValueError(
+                "Deterministic manual-order gates rejected: " + "; ".join(preview.reasons)
+            )
 
         from alpaca.trading.enums import (
             OrderClass,

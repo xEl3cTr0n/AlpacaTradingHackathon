@@ -231,6 +231,18 @@ export interface ManualTradePreview {
   maximum_reward: number;
   risk_budget: number;
   liquidity_passed: boolean;
+  quote_checks: Array<{
+    symbol: string;
+    valid: boolean;
+    as_of: string | null;
+    age_seconds: number | null;
+    maximum_age_seconds: number;
+    bid: number | null;
+    ask: number | null;
+    reasons: string[];
+  }>;
+  capacity_passed: boolean;
+  market_open: boolean;
   reasons: string[];
 }
 

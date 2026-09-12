@@ -1,5 +1,4 @@
 import pytest
-
 from regimeshift.config import Settings
 from regimeshift.services.alpaca_cli import AlpacaCliAdapter
 
@@ -8,7 +7,14 @@ def adapter(pending_roots: list[str]) -> AlpacaCliAdapter:
     instance = AlpacaCliAdapter.__new__(AlpacaCliAdapter)
     instance.settings = Settings(max_open_spreads=3)
     instance._run = lambda args: {
-        "equity": "100000", "last_equity": "100000", "trading_blocked": False
+        "equity": "100000",
+        "last_equity": "100000",
+        "trading_blocked": False,
+        "account_blocked": False,
+        "trade_suspended_by_user": False,
+        "status": "ACTIVE",
+        "options_buying_power": "50000",
+        "options_trading_level": 3,
     }
     orders = [
         {

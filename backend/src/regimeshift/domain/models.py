@@ -504,6 +504,17 @@ class ManualTradeRequest(BaseModel):
     rationale: str = Field(default="Operator-entered paper trade", max_length=240)
 
 
+class OptionQuoteCheck(BaseModel):
+    symbol: str
+    valid: bool
+    as_of: datetime | None = None
+    age_seconds: float | None = None
+    maximum_age_seconds: int = 120
+    bid: float | None = None
+    ask: float | None = None
+    reasons: list[str] = Field(default_factory=list)
+
+
 class ManualTradePreview(BaseModel):
     valid: bool
     paper_only: bool = True
@@ -521,6 +532,9 @@ class ManualTradePreview(BaseModel):
     maximum_reward: float
     risk_budget: float
     liquidity_passed: bool
+    quote_checks: list[OptionQuoteCheck] = Field(default_factory=list)
+    capacity_passed: bool = False
+    market_open: bool = False
     reasons: list[str]
 
 

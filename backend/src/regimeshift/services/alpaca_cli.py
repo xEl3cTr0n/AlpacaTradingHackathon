@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from regimeshift.config import Settings
-from regimeshift.domain.exits import managed_exit_plan
+from regimeshift.domain.execution_checks import (
+    check_option_quote,
+    finite_number,
+    verify_entry_capacity,
+    verify_open_clock,
+)
+from regimeshift.domain.exits import managed_exit_plan, option_contract_details
 from regimeshift.domain.models import DecisionSnapshot, Direction, StrategyName
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE
 
@@ -21,6 +27,8 @@ class AlpacaCliAdapter:
     def __init__(self, settings: Settings):
         if not settings.alpaca_configured:
             raise ValueError("Alpaca paper credentials are not configured")
+        if not settings.alpaca_paper:
+            raise ValueError("CLI trader refuses non-paper configuration")
         workspace_binary = ROOT / ".alpaca-cli" / "alpaca"
         system_binary = shutil.which("alpaca")
         if workspace_binary.is_file():
@@ -176,6 +184,7 @@ class AlpacaCliAdapter:
             "open_interest_floor": 50 if underlying != "XSP" else None,
             "long_open_interest": long_open_interest,
             "short_open_interest": short_open_interest,
+            "quote_checks": [long_quote["check"], short_quote["check"]],
             "legs": [
                 {
                     "symbol": long_contract["symbol"],
@@ -222,8 +231,36 @@ class AlpacaCliAdapter:
                 reasons.append("quoted debit exceeds Risk Agent budget")
             raise ValueError("Deterministic execution gates rejected: " + "; ".join(reasons))
         capacity = None
+        quote_checks = None
         if execute:
-            capacity = self.verify_execution_capacity(plan["underlying_symbol"])
+            maximum_loss = self.verify_plan_shape(snapshot, plan)
+            capacity = self.verify_execution_capacity(
+                plan["underlying_symbol"],
+                maximum_loss=maximum_loss,
+            )
+            verify_open_clock(self._run(["clock", "--quiet"]))
+            # Re-fetch after account checks. Never trust prepared-plan quote booleans.
+            symbols = [leg["symbol"] for leg in plan["legs"]]
+            fresh = self._run(
+                [
+                    "data",
+                    "option",
+                    "snapshot",
+                    "--symbols",
+                    ",".join(symbols),
+                    "--quiet",
+                ]
+            ).get("snapshots", {})
+            current = {symbol: self._quote(fresh, symbol) for symbol in symbols}
+            long_symbol = next(leg["symbol"] for leg in plan["legs"] if leg["side"] == "buy")
+            short_symbol = next(leg["symbol"] for leg in plan["legs"] if leg["side"] == "sell")
+            natural = current[long_symbol]["ask"] - current[short_symbol]["bid"]
+            width = abs(
+                option_contract_details(long_symbol)[3] - option_contract_details(short_symbol)[3]
+            )
+            if not 0 < natural < width or plan["limit_debit"] > natural * 1.10 + 0.05:
+                raise ValueError("Fresh option debit failed the price/width gate; rebuild the plan")
+            quote_checks = [current[symbol]["check"] for symbol in symbols]
 
         arguments = [
             "order",
@@ -253,71 +290,92 @@ class AlpacaCliAdapter:
             "paper_only": True,
             "order": result,
             "execution_capacity": capacity,
+            "quote_checks": quote_checks,
         }
 
-    def verify_execution_capacity(self, underlying: str) -> dict[str, Any]:
+    def verify_plan_shape(self, snapshot: DecisionSnapshot, plan: dict[str, Any]) -> float:
+        """Recompute submitted debit risk and structure, not caller-provided loss fields."""
+        if not self.settings.alpaca_paper or plan.get("paper_only") is not True:
+            raise ValueError("CLI submission requires the paper environment")
+        if plan.get("quantity") != 1 or isinstance(plan.get("quantity"), bool):
+            raise ValueError("CLI debit spreads are restricted to one contract")
+        legs = plan.get("legs")
+        if not isinstance(legs, list) or len(legs) != 2:
+            raise ValueError("CLI submission requires exactly two option legs")
+        buys = [
+            leg
+            for leg in legs
+            if leg.get("side") == "buy" and leg.get("position_intent") == "buy_to_open"
+        ]
+        sells = [
+            leg
+            for leg in legs
+            if leg.get("side") == "sell" and leg.get("position_intent") == "sell_to_open"
+        ]
+        if (
+            len(buys) != 1
+            or len(sells) != 1
+            or any(finite_number(leg.get("ratio_qty")) != 1 for leg in legs)
+        ):
+            raise ValueError("CLI submission requires a 1:1 opening debit spread")
+        long, short = (option_contract_details(leg["symbol"]) for leg in (buys[0], sells[0]))
+        if long[:3] != short[:3] or long[0] != snapshot.strategy.underlying_symbol:
+            raise ValueError("Option legs do not match the approved underlying and expiration")
+        expected_type = {StrategyName.BULL_CALL_SPREAD: "C", StrategyName.BEAR_PUT_SPREAD: "P"}
+        if expected_type.get(snapshot.strategy.name) != long[2]:
+            raise ValueError("Option type does not match the approved directional strategy")
+        if plan.get("underlying_symbol") != long[0]:
+            raise ValueError("Plan underlying does not match its option legs")
+        width = (short[3] - long[3]) * (1 if long[2] == "C" else -1)
+        debit = finite_number(plan.get("limit_debit"))
+        if debit is None or not 0 < debit < width:
+            raise ValueError("Submitted debit is invalid relative to spread width")
+        loss = round(debit * 100, 2)
+        claimed_loss = finite_number(plan.get("maximum_loss"))
+        if claimed_loss is None or abs(claimed_loss - loss) > 0.005:
+            raise ValueError("Declared maximum loss does not match submitted debit")
+        if loss > min(snapshot.risk.max_allowed_loss, self.settings.max_position_loss_dollars):
+            raise ValueError("Submitted debit exceeds the deterministic Risk Agent budget")
+        dte = (long[1].date() - datetime.now(UTC).date()).days
+        if not (21 <= dte <= 45 if long[0] == "XSP" else 7 <= dte <= 60):
+            raise ValueError("Submitted expiration is outside the supported DTE range")
+        return loss
+
+    def verify_execution_capacity(
+        self,
+        underlying: str,
+        *,
+        maximum_loss: float = 0,
+    ) -> dict[str, Any]:
         """Fail closed on account loss, exposure, or duplicate-underlying risk."""
+        # CLI 0.0.14's typed `account get` output omits false safety flags.
+        # Raw GET retains the distinction between verified false and missing.
         account = self._run(
             [
-                "account",
-                "get",
+                "api",
+                "GET",
+                "/v2/account",
                 "--quiet",
                 "--jq",
-                "{equity: .equity, last_equity: .last_equity, trading_blocked: .trading_blocked}",
+                "{equity: .equity, last_equity: .last_equity, status: .status, "
+                "trading_blocked: .trading_blocked, account_blocked: .account_blocked, "
+                "trade_suspended_by_user: .trade_suspended_by_user, "
+                "options_buying_power: .options_buying_power, "
+                "options_trading_level: .options_trading_level}",
             ]
         )
-        equity = float(account.get("equity") or 0)
-        last_equity = float(account.get("last_equity") or 0)
-        if equity <= 0 or last_equity <= 0:
-            raise ValueError("Paper account equity could not be verified")
-        daily_return = equity / last_equity - 1
-        if bool(account.get("trading_blocked")):
-            raise ValueError("Paper account is trading blocked")
-        if daily_return <= -self.settings.max_daily_loss_pct:
-            raise ValueError(
-                f"Daily loss circuit breaker reached {daily_return:.2%}; no new entries"
-            )
-
         positions = self._run_list(["position", "list", "--quiet"])
         open_orders = self._run_list(
             ["order", "list", "--status", "open", "--nested", "--limit", "500", "--quiet"]
         )
-        position_roots = {
-            self._option_root(str(item.get("symbol", "")))
-            for item in positions
-            if item.get("asset_class") in {"us_option", "us_index"}
-        }
-        pending_entry_ids = {
-            str(item.get("client_order_id", ""))
-            for item in open_orders
-            if str(item.get("client_order_id", "")).startswith(
-                ("regimeshift-signal-", "regimeshift-manual-")
-            )
-        }
-        pending_roots = {
-            self._option_root(str((item.get("legs") or [{}])[0].get("symbol", "")))
-            for item in open_orders
-            if item.get("legs")
-            and str(item.get("client_order_id", "")).startswith(
-                ("regimeshift-signal-", "regimeshift-manual-")
-            )
-        }
-        active_roots = {root for root in position_roots | pending_roots if root}
-        if underlying in active_roots:
-            raise ValueError(f"An open or pending RegimeShift spread already uses {underlying}")
-        active_spreads = max(len(active_roots), len(pending_entry_ids))
-        if active_spreads >= self.settings.max_open_spreads:
-            raise ValueError(
-                f"Maximum of {self.settings.max_open_spreads} concurrent spreads reached"
-            )
-        return {
-            "daily_return": round(daily_return, 6),
-            "daily_loss_limit": self.settings.max_daily_loss_pct,
-            "active_spreads": active_spreads,
-            "max_open_spreads": self.settings.max_open_spreads,
-            "same_underlying_clear": True,
-            "paper_only": True,
-        }
+        return verify_entry_capacity(
+            self.settings,
+            underlying,
+            account,
+            positions,
+            open_orders,
+            maximum_loss=maximum_loss,
+        )
 
     @staticmethod
     def signal_client_order_id(signal_key: str) -> str:
@@ -428,6 +486,7 @@ class AlpacaCliAdapter:
         option_type: str,
         risk_cap: float,
         require_open_interest: bool = True,
+        now: datetime | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Prefer near-ATM pairs that satisfy existing quote, OI and debit gates."""
         liquid = []
@@ -436,14 +495,14 @@ class AlpacaCliAdapter:
             if require_open_interest and (interest is None or interest < 50):
                 continue
             try:
-                quote = cls._quote(snapshots, contract["symbol"])
+                quote = cls._quote(snapshots, contract["symbol"], now=now)
             except (ValueError, TypeError):
                 continue
             if cls._liquid(quote):
                 liquid.append((contract, quote))
         if len(liquid) < 2:
             raise ValueError(
-                "Fewer than two contracts pass quote-width, size and open-interest gates"
+                "Fewer than two contracts pass fresh-quote, width, size and open-interest gates"
             )
         liquid.sort(key=lambda item: abs(float(item[0]["strike_price"]) - spot))
         target_width = max(1.0, spot * 0.02)
@@ -470,15 +529,31 @@ class AlpacaCliAdapter:
         return long_contract, short_contract
 
     @staticmethod
-    def _quote(snapshots: dict[str, Any], symbol: str) -> dict[str, float]:
+    def _quote(
+        snapshots: dict[str, Any],
+        symbol: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
         quote = snapshots.get(symbol, {}).get("latestQuote", {})
-        bid = float(quote.get("bp") or 0)
-        ask = float(quote.get("ap") or 0)
-        bid_size = float(quote.get("bs") or 0)
-        ask_size = float(quote.get("as") or 0)
-        if bid <= 0 or ask <= 0 or ask < bid:
-            raise ValueError(f"Invalid option quote returned for {symbol}")
-        return {"bid": bid, "ask": ask, "bid_size": bid_size, "ask_size": ask_size}
+        check = check_option_quote(
+            symbol,
+            bid=quote.get("bp"),
+            ask=quote.get("ap"),
+            bid_size=quote.get("bs"),
+            ask_size=quote.get("as"),
+            timestamp=quote.get("t"),
+            now=now,
+        )
+        if not check.valid:
+            raise ValueError(f"Invalid option quote for {symbol}: {'; '.join(check.reasons)}")
+        return {
+            "bid": check.bid,
+            "ask": check.ask,
+            "bid_size": float(quote["bs"]),
+            "ask_size": float(quote["as"]),
+            "check": check.model_dump(mode="json"),
+        }
 
     @staticmethod
     def _liquid(quote: dict[str, float]) -> bool:
