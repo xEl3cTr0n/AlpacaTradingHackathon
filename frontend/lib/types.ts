@@ -106,6 +106,7 @@ export interface DecisionSnapshot {
     contract_count: number;
     net_gex: number;
     gross_gex: number;
+    gex_by_strike?: Array<{ strike: number; call_gex: number; put_gex: number; net_gex: number }>;
     gamma_concentration?: number | null;
     nope_options?: number | null;
     put_vega_intensity?: number | null;
@@ -271,6 +272,19 @@ export interface ChartSnapshot {
   source: string;
   bars: PricePoint[];
   volume_rsi_signals?: VolumeRsiReading[];
+}
+
+export interface ChartContextSnapshot {
+  symbol: string;
+  generated_at: string;
+  status: "available" | "partial" | "unavailable";
+  read_only: true;
+  underlying_price: number | null;
+  spot_as_of: string | null;
+  swing_as_of: string | null;
+  swing: DecisionSnapshot["swing"] | null;
+  options_microstructure: DecisionSnapshot["options_microstructure"] | null;
+  notes: string[];
 }
 
 export interface OptionChainContract {

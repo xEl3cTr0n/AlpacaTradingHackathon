@@ -133,6 +133,27 @@
 .chart-rsi-controls select { background: var(--surface); color: var(--text); border: 1px solid var(--border-bright); border-radius: 6px; min-height: 44px; padding: 8px; font: inherit; }
 .chart-rsi-controls select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .chart-rsi-controls p { width: 100%; margin: 0; color: var(--text-muted); font-size: 12px; }
+.chart-context-panel { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+.chart-context-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; }
+.chart-context-heading > span { color: var(--text-muted); flex: 1; }
+.chart-context-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.chart-context-metrics > div { min-width: 0; border-left: 1px solid var(--border); padding-left: 10px; }
+.chart-context-metrics span, .chart-context-metrics small { display: block; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.chart-context-metrics strong { display: block; margin: 5px 0; color: var(--text); font: 600 13px var(--font-mono), monospace; overflow-wrap: anywhere; }
+.chart-context-panel summary { min-height: 40px; padding: 10px 0; color: var(--text-soft); font-size: 12px; cursor: pointer; }
+.chart-context-panel p, .chart-context-panel li { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.gex-histogram { display: flex; gap: 3px; min-height: 145px; overflow-x: auto; padding: 10px 0; }
+.gex-column { flex: 1 0 48px; min-width: 0; text-align: center; }
+.gex-column > span { display: block; font: 500 12px var(--font-mono), monospace; color: var(--text-muted); padding-top: 5px; }
+.gex-column-plot { height: 108px; position: relative; background: linear-gradient(to bottom, transparent calc(50% - 1px), var(--border-bright) 50%, transparent calc(50% + 1px)); }
+.gex-column-plot > span { position: absolute; left: 12%; width: 76%; }
+.gex-positive { bottom: 50%; background: var(--cyan); }
+.gex-negative { top: 50%; background: var(--amber); }
+.gex-data-table { width: 100%; border-collapse: collapse; text-align: right; font: 500 12px var(--font-mono), monospace; }
+.gex-data-table caption { text-align: left; color: var(--text-muted); padding: 12px 0; }
+.gex-data-table th, .gex-data-table td { padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+@media (max-width: 1200px) { .chart-context-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .chart-context-metrics { grid-template-columns: minmax(0, 1fr); } }
 .chart-provider-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
 .chart-provider-tabs button { min-height: 44px; }
 @media (max-width: 1100px) {

@@ -9,7 +9,9 @@ import type {
   SeriesMarker,
   UTCTimestamp,
 } from "lightweight-charts";
-import type { ChartSnapshot, DecisionSnapshot, LiveMarketTick, PricePoint } from "@/lib/types";
+import type { ChartContextSnapshot, ChartSnapshot, DecisionSnapshot, LiveMarketTick, PricePoint } from "@/lib/types";
+import { chartContextLevels, matchingChartContext } from "@/lib/chart-context";
+import { ChartContextPanel } from "./chart-context-panel";
 
 type Timeframe = ChartSnapshot["timeframe"];
 
@@ -25,6 +27,12 @@ const liveFetcher = async (url: string): Promise<LiveMarketTick> => {
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error(`Live tape returned ${response.status}`);
   return response.json() as Promise<LiveMarketTick>;
+};
+
+const contextFetcher = async (url: string): Promise<ChartContextSnapshot> => {
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(35_000) });
+  if (!response.ok) throw new Error("Chart overlays unavailable");
+  return response.json() as Promise<ChartContextSnapshot>;
 };
 
 const toTime = (timestamp: string): UTCTimestamp =>
@@ -56,6 +64,7 @@ export function MarketChartTerminal({
   const [localSymbol, setLocalSymbol] = useState(snapshot.market.symbol);
   const chartSymbol = symbol ?? localSymbol;
   const [renderError, setRenderError] = useState(false);
+  const [renderAttempt, setRenderAttempt] = useState(0);
   const [rsiMode, setRsiMode] = useState<"off" | "raw" | "quiet" | "reversal">("quiet");
   const [rsiLowVolFilter, setRsiLowVolFilter] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +89,13 @@ export function MarketChartTerminal({
     errorRetryCount: 2,
   });
   const activeTick = tick?.symbol === chartSymbol ? tick : chartTick?.symbol === chartSymbol ? chartTick : undefined;
+  const { data: contextData, error: contextError, isValidating: contextLoading, mutate: refreshContext } = useSWR(
+    `/api/v1/chart-context?symbol=${encodeURIComponent(chartSymbol)}`, contextFetcher,
+    { refreshInterval: 60_000, dedupingInterval: 30_000, keepPreviousData: false,
+      refreshWhenHidden: false, refreshWhenOffline: false, errorRetryCount: 1 },
+  );
+  const context = matchingChartContext(chartSymbol, contextData, Boolean(contextError));
+  const overlayLevels = useMemo(() => chartContextLevels(context), [context]);
   const bars = useMemo(
     () => data?.bars ?? (timeframe === "1Day" && chartSymbol === snapshot.market.symbol ? snapshot.market.prices : []),
     [data?.bars, snapshot.market.prices, snapshot.market.symbol, timeframe, chartSymbol],
@@ -188,19 +204,8 @@ export function MarketChartTerminal({
         ema18.setData(ema(bars, 18));
         ema50.setData(ema(bars, 50));
 
-        if (chartSymbol === snapshot.market.symbol) {
-          const micro = snapshot.options_microstructure;
-          const levels = [
-            ["Put wall", micro.put_wall, "#ef5350", LineStyle.Solid],
-            ["Call wall", micro.call_wall, "#fbbf24", LineStyle.Solid],
-            ["Key gamma", micro.key_gamma_strike, "#d946ef", LineStyle.Dashed],
-            ["Hedge wall", micro.hedge_wall, "#a78bfa", LineStyle.Dashed],
-            ["Swing low", snapshot.swing.swing_low, "#38bdf8", LineStyle.Dotted],
-            ["Swing high", snapshot.swing.swing_high, "#35dc7b", LineStyle.Dotted],
-          ] as const;
-          for (const [title, price, color, lineStyle] of levels) {
-            if (price && price > 0) candles.createPriceLine({ price, color, lineStyle, lineWidth: 1, title });
-          }
+        for (const { title, price, color, dashed } of overlayLevels) {
+          candles.createPriceLine({ price, color, lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid, lineWidth: 1, title });
         }
         const previousView = visibleRangeRef.current;
         if (previousView?.key === viewKey) chart.timeScale().setVisibleLogicalRange(previousView.range);
@@ -218,7 +223,7 @@ export function MarketChartTerminal({
       ownedChart?.remove();
       if (chartRef.current === ownedChart) chartRef.current = null;
     };
-  }, [bars, chartSymbol, snapshot.market.symbol, snapshot.options_microstructure, snapshot.swing, timeframe, data?.volume_rsi_signals, rsiMode]);
+  }, [bars, chartSymbol, overlayLevels, timeframe, data?.volume_rsi_signals, rsiMode, renderAttempt]);
 
   // Display tape independently: quotes are not OHLC bars, and an old trade
   // must never rewrite newer history or fabricate a daily/session candle.
@@ -255,7 +260,7 @@ export function MarketChartTerminal({
           ))}
         </div>
       </div>
-      <details className="chart-indicators"><summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {chartSymbol === snapshot.market.symbol ? "analysis levels" : "no matching analysis levels"}</summary><div className="chart-rsi-controls"><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div></details>
+      <details className="chart-indicators"><summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {overlayLevels.length} automatic levels</summary><div className="chart-rsi-controls"><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div></details>
       <div className="chart-stat-strip">
         <span>O <b>{latest?.open?.toFixed(2) ?? "—"}</b></span>
         <span>H <b>{latest?.high?.toFixed(2) ?? "—"}</b></span>
@@ -266,7 +271,7 @@ export function MarketChartTerminal({
       </div>
       <div className="trading-chart-shell">
         {isLoading && !bars.length && <div className="chart-placeholder"><BarChart3 size={22} aria-hidden="true" /> Loading Alpaca bars…</div>}
-        {(error || renderError) && <div className="chart-feed-error" role="alert">{renderError ? "Chart renderer unavailable." : "Bar refresh failed; displayed history may be stale."} <button type="button" onClick={() => void mutate()}>Retry chart</button></div>}
+        {(error || renderError) && <div className="chart-feed-error" role="alert">{renderError ? "Chart renderer unavailable." : "Bar refresh failed; displayed history may be stale."} <button type="button" onClick={() => { if (renderError) setRenderAttempt((value) => value + 1); void mutate(); }}>Retry chart</button></div>}
         {!isLoading && !error && !bars.length && <div className="chart-placeholder">No bars returned. Choose another ticker or timeframe.</div>}
         <div ref={containerRef} className="trading-chart" />
       </div>
@@ -281,6 +286,7 @@ export function MarketChartTerminal({
         <summary>Recent OHLC data</summary>
         <div className="table-scroll compact-chart-table"><table><thead><tr><th>Time</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead><tbody>{bars.slice(-10).reverse().map((bar) => <tr key={bar.timestamp}><td>{new Date(bar.timestamp).toLocaleString()}</td><td>{bar.open?.toFixed(2) ?? "—"}</td><td>{bar.high?.toFixed(2) ?? "—"}</td><td>{bar.low?.toFixed(2) ?? "—"}</td><td>{bar.close.toFixed(2)}</td><td>{bar.volume.toLocaleString()}</td></tr>)}</tbody></table></div>
       </details>
+      <ChartContextPanel symbol={chartSymbol} context={context} loading={contextLoading} failed={Boolean(contextError)} onRetry={() => void refreshContext()} />
     </section>
   );
 }

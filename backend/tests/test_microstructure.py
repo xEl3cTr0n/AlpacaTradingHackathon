@@ -39,6 +39,9 @@ def test_gex_and_concentration_follow_published_formulas() -> None:
     assert result.call_wall == 101
     assert result.key_gamma_strike == 100
     assert result.hedge_wall == 100
+    assert sum(row.net_gex for row in result.gex_by_strike) == result.net_gex
+    assert sum(row.call_gex - row.put_gex for row in result.gex_by_strike) == result.gross_gex
+    assert all(row.call_gex >= 0 and row.put_gex <= 0 for row in result.gex_by_strike)
 
 
 def test_sparse_chain_abstains_instead_of_inventing_data() -> None:
@@ -46,6 +49,7 @@ def test_sparse_chain_abstains_instead_of_inventing_data() -> None:
     assert result.status == "unavailable"
     assert result.data_quality == 0
     assert result.gamma_regime == GammaRegime.UNAVAILABLE
+    assert result.gex_by_strike == []
 
 
 def test_nguyen_profile_exposes_directional_strike_levels() -> None:

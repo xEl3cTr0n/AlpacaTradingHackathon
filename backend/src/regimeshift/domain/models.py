@@ -204,6 +204,13 @@ class SectorRotationAssessment(BaseModel):
     rationale: str
 
 
+class GexStrike(BaseModel):
+    strike: float = Field(gt=0)
+    call_gex: float = Field(ge=0)
+    put_gex: float = Field(le=0)
+    net_gex: float
+
+
 class OptionsMicrostructureAssessment(BaseModel):
     underlying_symbol: str
     as_of: datetime
@@ -226,6 +233,7 @@ class OptionsMicrostructureAssessment(BaseModel):
     data_quality: float = Field(ge=0, le=1)
     rationale: str
     evidence: list[str]
+    gex_by_strike: list[GexStrike] = Field(default_factory=list)
 
 
 class MacroQuadAssessment(BaseModel):
@@ -564,6 +572,19 @@ class ChartSnapshot(BaseModel):
     source: str
     bars: list[PricePoint]
     volume_rsi_signals: list[VolumeRsiReading] = Field(default_factory=list)
+
+
+class ChartContextSnapshot(BaseModel):
+    symbol: str
+    generated_at: datetime
+    status: Literal["available", "partial", "unavailable"]
+    read_only: Literal[True] = True
+    underlying_price: float | None = Field(default=None, gt=0)
+    spot_as_of: datetime | None = None
+    swing_as_of: datetime | None = None
+    swing: SwingAssessment | None = None
+    options_microstructure: OptionsMicrostructureAssessment | None = None
+    notes: list[str] = Field(default_factory=list)
 
 
 class OptionChainContract(BaseModel):

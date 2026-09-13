@@ -12,6 +12,7 @@ from regimeshift.domain.backtest_evidence import (
 from regimeshift.domain.models import (
     AnalysisControls,
     AnalyzeRequest,
+    ChartContextSnapshot,
     ChartSnapshot,
     DecisionSnapshot,
     LiveMarketTick,
@@ -29,6 +30,7 @@ from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.domain.scanner_diagnostics import NEW_YORK, aware
 from regimeshift.domain.volume_rsi import volume_rsi_series
 from regimeshift.orchestration.pipeline import DecisionPipeline
+from regimeshift.services.chart_context import get_chart_context
 from regimeshift.services.live_tape import get_live_tick
 from regimeshift.services.manual_trading import ManualPaperTrader
 from regimeshift.services.market_data import MarketDataProvider, build_market_data_provider
@@ -177,6 +179,19 @@ def chart(
     except Exception as error:
         raise HTTPException(
             status_code=502, detail=f"Chart data request failed: {error}"
+        ) from error
+
+
+@app.get("/api/v1/chart-context", response_model=ChartContextSnapshot)
+def chart_context(
+    settings: SettingsDependency,
+    symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
+) -> ChartContextSnapshot:
+    try:
+        return get_chart_context(settings, symbol)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail="Chart context unavailable; price chart remains independent"
         ) from error
 
 

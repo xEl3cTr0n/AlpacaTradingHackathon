@@ -54,6 +54,7 @@ def assess_microstructure(
     net_gex = gross_gex = total_gamma_oi = atm_gamma_oi = 0.0
     call_delta_volume = put_delta_volume = total_volume = 0.0
     put_vega_volume = total_vega_volume = 0.0
+    profile: dict[float, dict[str, float]] = {}
 
     for item in usable:
         option_type = str(item["option_type"]).lower()
@@ -65,6 +66,8 @@ def assess_microstructure(
         vega = abs(float(item.get("vega") or 0))
         unsigned = gamma * oi * 100 * spot
         signed = unsigned if option_type == "call" else -unsigned
+        row = profile.setdefault(strike, {"call_gex": 0.0, "put_gex": 0.0})
+        row["call_gex" if option_type == "call" else "put_gex"] += signed
         net_gex += signed
         gross_gex += unsigned
         if option_type == "call":
@@ -122,6 +125,15 @@ def assess_microstructure(
         hedge_wall=levels.hedge_wall,
         gamma_regime=gamma_regime,
         data_quality=round(data_quality, 3),
+        gex_by_strike=[
+            {
+                "strike": strike,
+                "call_gex": round(row["call_gex"], 2),
+                "put_gex": round(row["put_gex"], 2),
+                "net_gex": round(row["call_gex"] + row["put_gex"], 2),
+            }
+            for strike, row in sorted(profile.items())
+        ],
         rationale=rationale,
         evidence=[
             f"Net GEX {net_gex:,.0f}; gross GEX {gross_gex:,.0f}",
