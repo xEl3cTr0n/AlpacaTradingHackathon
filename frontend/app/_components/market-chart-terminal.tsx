@@ -12,6 +12,7 @@ import type {
 import type { ChartContextSnapshot, ChartSnapshot, DecisionSnapshot, LiveMarketTick, PricePoint } from "@/lib/types";
 import { chartContextLevels, matchingChartContext } from "@/lib/chart-context";
 import { ChartContextPanel } from "./chart-context-panel";
+import { useWorkspacePreferences } from "@/lib/use-workspace-preferences";
 
 type Timeframe = ChartSnapshot["timeframe"];
 
@@ -53,20 +54,26 @@ export function MarketChartTerminal({
   quoteRefreshMs = 5000,
   symbol,
   onSymbolChange,
+  compact = false,
 }: {
   snapshot: DecisionSnapshot;
   tick?: LiveMarketTick;
   quoteRefreshMs?: number;
   symbol?: string;
   onSymbolChange?: (symbol: string) => void;
+  compact?: boolean;
 }) {
-  const [timeframe, setTimeframe] = useState<Timeframe>("5Min");
+  const [preferences, updatePreferences] = useWorkspacePreferences();
+  const timeframe = preferences.timeframe;
+  const setTimeframe = (value: Timeframe) => updatePreferences({ timeframe: value });
   const [localSymbol, setLocalSymbol] = useState(snapshot.market.symbol);
   const chartSymbol = symbol ?? localSymbol;
   const [renderError, setRenderError] = useState(false);
   const [renderAttempt, setRenderAttempt] = useState(0);
-  const [rsiMode, setRsiMode] = useState<"off" | "raw" | "quiet" | "reversal">("quiet");
-  const [rsiLowVolFilter, setRsiLowVolFilter] = useState(false);
+  const rsiMode = preferences.rsiMode;
+  const setRsiMode = (value: typeof rsiMode) => updatePreferences({ rsiMode: value });
+  const rsiLowVolFilter = preferences.lowVolFilter;
+  const setRsiLowVolFilter = (value: boolean) => updatePreferences({ lowVolFilter: value });
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const visibleRangeRef = useRef<{ key: string; range: LogicalRange } | null>(null);
@@ -95,7 +102,7 @@ export function MarketChartTerminal({
       refreshWhenHidden: false, refreshWhenOffline: false, errorRetryCount: 1 },
   );
   const context = matchingChartContext(chartSymbol, contextData, Boolean(contextError));
-  const overlayLevels = useMemo(() => chartContextLevels(context), [context]);
+  const overlayLevels = useMemo(() => preferences.showLevels ? chartContextLevels(context) : [], [context, preferences.showLevels]);
   const bars = useMemo(
     () => data?.bars ?? (timeframe === "1Day" && chartSymbol === snapshot.market.symbol ? snapshot.market.prices : []),
     [data?.bars, snapshot.market.prices, snapshot.market.symbol, timeframe, chartSymbol],
@@ -123,8 +130,8 @@ export function MarketChartTerminal({
         if (disposed || !containerRef.current) return;
         setRenderError(false);
         const chart = createChart(containerRef.current, {
-          autoSize: true,
-          height: 430,
+          autoSize: false,
+          height: containerRef.current.clientHeight || 430,
           layout: {
             attributionLogo: true,
             background: { type: ColorType.Solid, color: "#070c18" },
@@ -211,7 +218,7 @@ export function MarketChartTerminal({
         if (previousView?.key === viewKey) chart.timeScale().setVisibleLogicalRange(previousView.range);
         else chart.timeScale().fitContent();
         chartRef.current = chart;
-        resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: containerRef.current?.clientWidth }));
+        resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: containerRef.current?.clientWidth, height: containerRef.current?.clientHeight }));
         resizeObserver.observe(containerRef.current);
       },
     ).catch(() => { if (!disposed) setRenderError(true); });
@@ -236,11 +243,11 @@ export function MarketChartTerminal({
   };
 
   return (
-    <section className="market-terminal" aria-labelledby="market-chart-title">
+    <section className={compact ? "market-terminal compact-chart" : "market-terminal"} aria-labelledby="market-chart-title">
       <div className="chart-terminal-toolbar">
         <div>
-          <p className="eyebrow">Alpaca market data</p>
-          <h3 id="market-chart-title">{chartSymbol} chart terminal</h3>
+          {!compact && <p className="eyebrow">Alpaca market data</p>}
+          <h2 id="market-chart-title">{chartSymbol}{compact ? "" : " chart terminal"}</h2>
         </div>
         <div className="chart-quote">
           <strong>{activeTick ? `$${activeTick.price.toFixed(2)}` : "Loading quote…"}</strong>
@@ -248,10 +255,10 @@ export function MarketChartTerminal({
             {activeTick?.day_change_pct == null ? "—" : `${activeTick.day_change_pct >= 0 ? "+" : ""}${activeTick.day_change_pct.toFixed(2)}%`}
           </span>
         </div>
-        <form key={chartSymbol} className="chart-symbol-search" onSubmit={(event) => { event.preventDefault(); submitSymbol(String(new FormData(event.currentTarget).get("ticker") ?? "")); }}>
+        {!compact && <form key={chartSymbol} className="chart-symbol-search" onSubmit={(event) => { event.preventDefault(); submitSymbol(String(new FormData(event.currentTarget).get("ticker") ?? "")); }}>
           <label htmlFor="chart-symbol">Ticker</label>
           <div><input id="chart-symbol" name="ticker" defaultValue={chartSymbol} pattern="[A-Za-z.]{1,10}" required maxLength={10} spellCheck={false} aria-label="Search chart ticker" /><button type="submit" aria-label="Load ticker chart"><Search size={15} aria-hidden="true" /></button></div>
-        </form>
+        </form>}
         <div className="range-tabs" aria-label="Chart timeframe">
           {timeframes.map((item) => (
             <button key={item} type="button" className={timeframe === item ? "active" : ""} aria-pressed={timeframe === item} onClick={() => setTimeframe(item)}>
@@ -259,8 +266,9 @@ export function MarketChartTerminal({
             </button>
           ))}
         </div>
+        {compact && <label className="quote-refresh-control">Quotes<select value={preferences.quoteSeconds} onChange={(event) => updatePreferences({ quoteSeconds: Number(event.target.value) as 0 | 1 | 5 | 10 })}><option value={0}>Paused</option><option value={1}>1s</option><option value={5}>5s</option><option value={10}>10s</option></select></label>}
       </div>
-      <details className="chart-indicators"><summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {overlayLevels.length} automatic levels</summary><div className="chart-rsi-controls"><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div></details>
+      <details className="chart-indicators"><summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {overlayLevels.length} automatic levels</summary><div className="chart-rsi-controls"><label><input type="checkbox" checked={preferences.showLevels} onChange={(event) => updatePreferences({ showLevels: event.target.checked })} /> GEX &amp; swing levels</label><label><input type="checkbox" checked={preferences.showGex} onChange={(event) => updatePreferences({ showGex: event.target.checked })} /> GEX profile</label><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div></details>
       <div className="chart-stat-strip">
         <span>O <b>{latest?.open?.toFixed(2) ?? "—"}</b></span>
         <span>H <b>{latest?.high?.toFixed(2) ?? "—"}</b></span>

@@ -2,6 +2,7 @@
 
 import type { ChartContextSnapshot } from "@/lib/types";
 import { nearbyGexRows } from "@/lib/chart-context";
+import { useWorkspacePreferences } from "@/lib/use-workspace-preferences";
 
 const amount = (value: number) => Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2, signDisplay: "exceptZero" }).format(value);
 const price = (value?: number | null) => value == null ? "—" : `$${value.toFixed(2)}`;
@@ -13,6 +14,7 @@ export function ChartContextPanel({ symbol, context, loading, failed, onRetry }:
   failed: boolean;
   onRetry: () => void;
 }) {
+  const [preferences, updatePreferences] = useWorkspacePreferences();
   const micro = context?.options_microstructure;
   const rows = nearbyGexRows(context);
   const maximum = Math.max(...rows.map((row) => Math.abs(row.net_gex)), 1);
@@ -25,7 +27,7 @@ export function ChartContextPanel({ symbol, context, loading, failed, onRetry }:
       <div><span>20-session swing low / high</span><strong>{price(context?.swing?.swing_low)} / {price(context?.swing?.swing_high)}</strong><small>Completed daily bars</small></div>
     </div>
     {failed && <p className="workspace-warning">Price chart stays available. Retry overlays; old ticker levels are not reused.</p>}
-    {rows.length > 0 && <details className="chart-gex-profile" open><summary>GEX by strike · {rows.length} nearest strikes · signed proxy</summary>
+    {rows.length > 0 && <details className="chart-gex-profile" open={preferences.showGex} onToggle={(event) => { if (event.currentTarget.open !== preferences.showGex) updatePreferences({ showGex: event.currentTarget.open }); }}><summary>GEX by strike · {rows.length} nearest strikes · positioning proxy</summary>
       <div className="gex-histogram" role="img" aria-label={`Signed net gamma positioning proxy across ${rows.length} nearby ${symbol} strikes. Bars above zero are positive; below zero are negative. Exact values in table below.`}>
         {rows.map((row) => <div key={row.strike} className="gex-column"><div className="gex-column-plot"><span className={row.net_gex >= 0 ? "gex-positive" : "gex-negative"} style={{ height: `${Math.abs(row.net_gex) / maximum * 48}%` }} /></div><span>{row.strike}</span></div>)}
       </div>

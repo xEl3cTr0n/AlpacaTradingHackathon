@@ -902,3 +902,125 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
   .selected-legs > div:last-child { grid-column: auto; }
   .chain-meta span:last-child { margin-left: 0; }
 }
+
+/* Focused terminal: one navigation row, one ticker rail, one chart workspace. */
+.platform-shell.focused-shell { display: block; }
+.focused-shell .platform-content { max-width: none; width: 100%; padding: 12px 16px 20px; min-height: calc(100dvh - 140px); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.terminal-header { display: flex; align-items: center; gap: 20px; min-height: 58px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.terminal-brand { display: flex; align-items: center; gap: 8px; font: 700 12px var(--font-mono), monospace; }
+.terminal-header button, .terminal-status button, .rail-controls button, .rail-tabs button, .dock-heading button, .dialog-heading button { background: transparent; border: 0; color: var(--text-soft); cursor: pointer; min-height: 36px; padding: 6px 10px; border-radius: 4px; font: inherit; transition: background var(--transition), color var(--transition); }
+.terminal-header button:hover, .terminal-status button:hover, .rail-controls button:hover, .rail-tabs button:hover, .dock-heading button:hover, .dialog-heading button:hover { background: var(--muted); color: var(--text); }
+.terminal-nav, .rail-tabs, .dock-heading nav { display: flex; align-items: center; gap: 4px; }
+.terminal-nav button, .rail-tabs button, .dock-heading nav button { font-size: 13px; }
+.terminal-nav button.active, .rail-tabs button.active, .dock-heading nav button.active { color: var(--text); background: var(--muted); box-shadow: inset 0 -2px var(--cyan); }
+.terminal-search { display: flex; align-items: center; gap: 8px; margin-left: auto; border: 1px solid var(--border-bright); border-radius: 5px; padding-left: 10px; max-width: 300px; min-width: 160px; }
+.terminal-search input { color: var(--text); background: transparent; border: 0; padding: 8px 0; width: 90px; min-width: 0; flex: 1; font: 600 14px var(--font-mono), monospace; }
+.terminal-search button { font-size: 12px; white-space: nowrap; }
+.terminal-search kbd { color: var(--text-muted); margin-left: 8px; font: inherit; }
+.paper-badge { padding: 5px 8px; border: 1px solid var(--border-bright); border-radius: 4px; color: var(--cyan); font: 600 11px var(--font-mono), monospace; white-space: nowrap; }
+.terminal-status { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 18px; padding: 4px 16px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
+.terminal-status b { color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.terminal-status button { font-size: 12px; min-height: 30px; }
+.terminal-status .status-refresh { margin-left: auto; }
+.focused-workspace .terminal-grid { grid-template-columns: 208px minmax(0, 1fr); gap: 12px; }
+.focused-workspace .opportunity-rail { padding: 8px; }
+.rail-tabs button { flex: 1; }
+.rail-controls { display: flex; gap: 4px; align-items: center; margin: 8px 0; }
+.rail-controls .rail-filter { min-width: 0; margin: 0; flex: 1; }
+.rail-controls select { width: 100%; font-size: 12px; }
+.rail-controls button { padding: 6px; font-size: 12px; display: flex; gap: 4px; align-items: center; }
+.rail-controls .icon-action { min-width: 30px; }
+.focused-workspace .opportunity-list { max-height: min(68dvh, 720px); }
+.focused-workspace .opportunity-list > button { padding: 8px 6px; }
+.focused-workspace .opportunity-list small { font-size: 12px; }
+.rail-policy { color: var(--text-muted); font-size: 12px; line-height: 1.6; border-top: 1px solid var(--border); }
+.rail-policy summary { cursor: pointer; padding: 8px 0; min-height: 36px; }
+.focused-workspace .workspace-chart-column { gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.focused-workspace .workspace-chart-column > * { min-width: 0; }
+.focused-workspace .compact-chart { padding: 10px 12px; border-radius: 6px; }
+.compact-chart .chart-terminal-toolbar { display: flex; flex-wrap: wrap; gap: 14px; }
+.compact-chart .trading-chart-shell { min-width: 0; min-height: 340px; overflow: hidden; }
+.compact-chart .chart-terminal-toolbar h2 { margin: 0; font: 600 17px var(--font-mono), monospace; }
+.compact-chart .chart-quote { margin-right: auto; }
+.compact-chart .chart-quote strong { font-size: 17px; }
+.compact-chart .trading-chart { height: clamp(340px, 49dvh, 650px); }
+.compact-chart .chart-terminal-foot { gap: 6px 14px; font-size: 11px; }
+.compact-chart .chart-stat-strip { margin: 4px 0; }
+.compact-chart .chart-indicators summary { padding: 8px 0; min-height: 34px; font-size: 12px; }
+.quote-refresh-control { display: flex; gap: 7px; align-items: center; color: var(--text-muted); font-size: 12px; }
+.quote-refresh-control select { min-height: 34px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 4px; padding: 4px; }
+.compact-chart .chart-context-panel { padding-top: 8px; margin-top: 8px; }
+.compact-chart .chart-context-metrics { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0; }
+.compact-chart .chart-context-metrics > div { border: 0; padding: 0; }
+.compact-chart .chart-context-metrics strong { display: inline; font-size: 12px; margin-left: 6px; }
+.compact-chart .chart-context-metrics span { display: inline; }
+.compact-chart .chart-context-metrics small { font-size: 12px; }
+.compact-chart .gex-histogram { min-height: 95px; padding: 4px 0; }
+.compact-chart .gex-column-plot { height: 66px; }
+.compact-chart .chart-context-panel summary { min-height: 32px; padding: 6px 0; }
+.focused-workspace .compact-thesis { padding: 10px 12px; }
+.thesis-summary { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; color: var(--text-muted); font-size: 12px; }
+.thesis-summary > strong { color: var(--text); margin-right: auto; text-transform: capitalize; }
+.thesis-summary b { color: var(--text-soft); font: 500 12px var(--font-mono), monospace; margin-left: 4px; }
+.thesis-caption, .dock-caption { color: var(--text-muted); font-size: 12px; margin: 8px 0; line-height: 1.5; }
+.compact-thesis .workspace-warning { padding: 0; margin: 8px 0; }
+.compact-thesis .workspace-evidence summary { padding: 8px 0; min-height: 32px; font-size: 12px; }
+.trading-dock { min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.dock-heading { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--border); gap: 8px; }
+.dock-heading button { font-size: 12px; }
+.dock-heading nav { flex-wrap: wrap; }
+.dock-heading nav span { color: var(--text-muted); margin-left: 6px; font-size: 11px; }
+.trading-dock > p { padding: 0 12px; }
+.dock-table-scroll { max-height: 260px; overflow: auto; }
+.dock-table-scroll table { border-collapse: collapse; width: 100%; text-align: right; font: 500 12px var(--font-mono), monospace; }
+.dock-table-scroll td, .dock-table-scroll th { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.dock-table-scroll th:first-child { text-align: left; }
+.dock-table-scroll thead { background: var(--surface); color: var(--text-muted); }
+.ticket-interactions { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.compact-options { padding: 10px; }
+.compact-options .ticket-interactions.with-ticket { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }
+.compact-options .panel { padding: 10px; border-radius: 5px; min-width: 0; box-shadow: none; }
+.compact-options .panel-heading { margin-bottom: 8px; }
+.compact-options h2 { font-size: 14px; }
+.compact-options .chain-controls { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.compact-options .chain-controls label, .compact-options .chain-controls legend { font-size: 12px; }
+.compact-options .chain-table-wrap { max-height: 330px; overflow: auto; }
+.compact-options .option-chain-table { min-width: 740px; width: 100%; }
+.compact-options .option-chain-table tr > :last-child:not([colspan]) { position: sticky; right: 0; background: var(--surface); }
+.compact-options .option-chain-table tr > :first-child:not([colspan]) { position: sticky; left: 0; background: var(--surface); }
+.compact-options .option-chain-table td, .compact-options .option-chain-table th { font-size: 12px; }
+.compact-options .chain-meta { font-size: 12px; gap: 6px 14px; }
+.compact-options .selected-legs, .compact-options .manual-form-grid, .compact-options .manual-auth, .compact-options .manual-preview { grid-template-columns: minmax(0, 1fr); }
+.compact-options .selected-legs { gap: 8px; }
+.compact-options .selected-legs small { overflow-wrap: anywhere; }
+.compact-options .manual-preview ul { grid-column: 1; }
+.compact-options .manual-ticket { border-color: var(--border-bright); }
+.scanner-filter-dialog { width: min(800px, calc(100vw - 24px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 20px; color: var(--text); background: var(--surface); border: 1px solid var(--border-bright); border-radius: 8px; }
+.scanner-filter-dialog::backdrop { background: rgb(2 6 23 / 75%); }
+.dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.dialog-heading h2 { margin: 0; font-size: 18px; }
+.scanner-filter-dialog .scanner-filters { border: 0; padding: 0; }
+@media (max-width: 1100px) {
+  .compact-options .ticket-interactions.with-ticket { grid-template-columns: minmax(0, 1fr); }
+  .terminal-header { gap: 10px; }
+}
+@media (max-width: 760px) {
+  .terminal-header { flex-wrap: wrap; padding: 8px 12px; }
+  .terminal-brand { margin-right: auto; }
+  .terminal-search { order: 4; width: 100%; max-width: none; }
+  .terminal-search input { font-size: 16px; }
+  .terminal-status { padding: 6px 12px; gap: 4px 12px; }
+  .focused-shell .platform-content { padding: 10px; }
+  .focused-workspace .terminal-grid { grid-template-columns: minmax(0, 1fr); }
+  .focused-workspace .opportunity-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 170px; }
+  .focused-workspace .opportunity-rail .rail-note, .focused-workspace .rail-policy { margin: 4px 0; }
+  .compact-chart .chart-terminal-toolbar { flex-wrap: wrap; }
+  .compact-chart .trading-chart { height: 350px; }
+  .terminal-nav button { padding: 8px; }
+  .compact-options input, .compact-options select { font-size: 16px; }
+  .scanner-filter-dialog { padding: 12px; }
+}
+.terminal-status b.positive { color: var(--accent); }
+.terminal-status b.negative { color: var(--red); }
+.terminal-header .terminal-brand { font: 700 12px var(--font-mono), monospace; }

@@ -1,7 +1,7 @@
 "use client";
 
-import { KeyRound, RefreshCw, Search, Send, ShieldCheck } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { KeyRound, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import useSWR from "swr";
 import { runManualPreview, submitManualPaperTrade } from "@/app/actions";
 import type {
@@ -31,7 +31,11 @@ const chainFetcher = async (url: string): Promise<OptionChainSnapshot> => {
 const price = (value?: number | null) => value == null ? "—" : `$${value.toFixed(2)}`;
 const percent = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 
-export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { defaultSymbol?: string; onSymbolChange?: (symbol: string) => void }) {
+export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange, compact = false, onOrderSubmitted }: { defaultSymbol?: string; onSymbolChange?: (symbol: string) => void; compact?: boolean; onOrderSubmitted?: () => void }) {
+  const [ticketOpen, setTicketOpen] = useState(!compact);
+  const ticketHeading = useRef<HTMLHeadingElement>(null);
+  const ticketToggle = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (compact && ticketOpen) ticketHeading.current?.focus(); }, [compact, ticketOpen]);
   const [draftSymbol, setDraftSymbol] = useState(defaultSymbol);
   const [underlying, setUnderlying] = useState(defaultSymbol);
   const [optionType, setOptionType] = useState<"call" | "put">("call");
@@ -56,6 +60,7 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
       refreshWhenHidden: false,
       refreshWhenOffline: false,
       errorRetryCount: 1,
+      keepPreviousData: false,
     },
   );
   const selectedExpiration = expiration || chain?.expiration || "";
@@ -69,6 +74,14 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
   function resetLegs() {
     setTrade((current) => ({ ...current, long_symbol: "", short_symbol: "" }));
     setPreview(null);
+    setConfirmation("");
+  }
+
+  function closeTicket() {
+    setTicketOpen(false);
+    setToken("");
+    setConfirmation("");
+    ticketToggle.current?.focus();
   }
 
   function loadSymbol() {
@@ -102,6 +115,7 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
   }
 
   function chooseLong(contract: OptionChainContract) {
+    setTicketOpen(true);
     const keepShort = shortContract && (
       optionType === "call"
         ? contract.strike < shortContract.strike
@@ -125,6 +139,7 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
       );
       return;
     }
+    setTicketOpen(true);
     const nextDebit = longContract?.ask != null && contract.bid != null
       ? Math.max(0.01, longContract.ask - contract.bid)
       : trade.limit_debit;
@@ -163,6 +178,8 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
         setMessage(`Paper order ${result.status}: ${result.order_id}`);
         setToken("");
         setConfirmation("");
+        setPreview(null);
+        onOrderSubmitted?.();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Paper order failed.");
       }
@@ -170,12 +187,14 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
   }
 
   return (
-    <div className="view-stack">
-      <header className="view-heading"><div><p className="eyebrow">Operator console</p><h1>Options chain ticket</h1><p>Browse ten nearby calls or puts, choose two legs, then pass the paper-only risk gate.</p></div><span className="decision-chip approved"><ShieldCheck size={15} aria-hidden="true" /> $1,000 max · 50% stop</span></header>
+    <div className={compact ? "compact-options" : "view-stack"}>
+      {!compact && <header className="view-heading"><div><p className="eyebrow">Operator console</p><h1>Options chain ticket</h1><p>Browse ten nearby calls or puts, choose two legs, then pass the paper-only risk gate.</p></div><span className="decision-chip approved"><ShieldCheck size={15} aria-hidden="true" /> $1,000 max · 50% stop</span></header>}
+      <fieldset className={compact && ticketOpen ? "ticket-interactions with-ticket" : "ticket-interactions"} disabled={pending}>
+      <legend className="sr-only">Paper option contract selection and order preview</legend>
       <section className="panel option-chain-panel" aria-labelledby="option-chain-title">
-        <div className="panel-heading"><div><p className="eyebrow">Alpaca option chain</p><h2 id="option-chain-title">Contract picker</h2></div><span className="source-label">10 contracts · selection only</span></div>
+        <div className="panel-heading"><div><h2 id="option-chain-title">{underlying} contracts</h2></div><button ref={ticketToggle} type="button" className="secondary-action" onClick={() => ticketOpen ? closeTicket() : setTicketOpen(true)} aria-expanded={ticketOpen} aria-controls="paper-ticket">{ticketOpen ? "Hide ticket" : "Open ticket"}</button></div>
         <div className="chain-controls">
-          <label>Underlying<div className="chain-symbol-input"><input aria-label="Underlying ticker" value={draftSymbol} onChange={(event) => setDraftSymbol(event.target.value.toUpperCase())} onKeyDown={(event) => { if (event.key === "Enter") loadSymbol(); }} /><button type="button" aria-label="Load option chain" onClick={loadSymbol}><Search size={15} aria-hidden="true" /></button></div></label>
+          {!compact && <label>Underlying<div className="chain-symbol-input"><input aria-label="Underlying ticker" value={draftSymbol} onChange={(event) => setDraftSymbol(event.target.value.toUpperCase())} onKeyDown={(event) => { if (event.key === "Enter") loadSymbol(); }} /><button type="button" aria-label="Load option chain" onClick={loadSymbol}><Search size={15} aria-hidden="true" /></button></div></label>}
           <fieldset><legend>Direction</legend><div className="segmented-control"><button type="button" className={optionType === "call" ? "active positive" : ""} aria-pressed={optionType === "call"} onClick={() => changeType("call")}>Calls · bullish</button><button type="button" className={optionType === "put" ? "active negative" : ""} aria-pressed={optionType === "put"} onClick={() => changeType("put")}>Puts · bearish</button></div></fieldset>
           <fieldset><legend>Moneyness</legend><div className="segmented-control"><button type="button" className={moneyness === "otm" ? "active" : ""} aria-pressed={moneyness === "otm"} onClick={() => changeMoneyness("otm")}>OTM</button><button type="button" className={moneyness === "itm" ? "active" : ""} aria-pressed={moneyness === "itm"} onClick={() => changeMoneyness("itm")}>ITM</button></div></fieldset>
           <label>Expiration<select value={selectedExpiration} onChange={(event) => { setExpiration(event.target.value); resetLegs(); }}>{chain?.expirations.map((item) => <option key={item} value={item}>{new Date(`${item}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</option>)}</select></label>
@@ -183,7 +202,7 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
         </div>
         <div className="chain-meta"><span>{chain ? `${chain.underlying_symbol} $${chain.underlying_price.toFixed(2)}` : underlying}</span><span>{optionType.toUpperCase()} · {moneyness.toUpperCase()}</span><span>{chain?.source ?? "Alpaca Options API"}</span><span>Showing 10 does not mean buying 10; order quantity stays one spread.</span></div>
         {chainError && <p className="chain-error" role="alert">{chainError.message}</p>}
-        <div className="table-scroll chain-table-wrap">
+        <div className="table-scroll chain-table-wrap" tabIndex={0} role="region" aria-label={`${underlying} option quotes; scroll for more columns`}>
           <table className="option-chain-table">
             <caption>Ten nearest {moneyness.toUpperCase()} {optionType} contracts for {underlying}</caption>
             <thead><tr><th>Strike</th><th>Bid</th><th>Ask</th><th>Mid</th><th>Spread</th><th>OI</th><th>IV</th><th>Delta</th><th>Leg</th></tr></thead>
@@ -199,8 +218,8 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
           </table>
         </div>
       </section>
-      <section className="panel manual-ticket">
-        <div className="panel-heading"><div><p className="eyebrow">Alpaca MLeg ticket</p><h2>Defined-risk spread</h2></div><KeyRound size={19} aria-hidden="true" /></div>
+      {ticketOpen && <section className="panel manual-ticket" id="paper-ticket" aria-label="Paper spread ticket">
+        <div className="panel-heading"><div><p className="eyebrow">Paper · one spread</p><h2 ref={ticketHeading} tabIndex={-1}>Defined-risk spread</h2></div>{compact ? <button type="button" className="secondary-action" onClick={closeTicket} aria-label="Close paper ticket"><X size={18} aria-hidden="true" /></button> : <KeyRound size={19} aria-hidden="true" />}</div>
         <div className="selected-legs" aria-label="Selected option legs">
           <div><span>Buy to open</span><strong>{longContract ? `${longContract.strike} ${optionType}` : "Choose long leg"}</strong><small>{trade.long_symbol || "No contract selected"}</small></div>
           <div><span>Sell to open</span><strong>{shortContract ? `${shortContract.strike} ${optionType}` : "Choose short leg"}</strong><small>{trade.short_symbol || "No contract selected"}</small></div>
@@ -220,7 +239,8 @@ export function ManualTradeTicket({ defaultSymbol = "SPY", onSymbolChange }: { d
         </div>
         <p className="run-status" role="status" aria-atomic="true">{message}</p>
         <p className="risk-disclaimer">The 50% stop is monitored by the scheduled paper worker, not guaranteed by the exchange. Gaps, spreads, and polling delay can make realized loss larger, so the Risk Agent reserves the full debit.</p>
-      </section>
+      </section>}
+      </fieldset>
     </div>
   );
 }
