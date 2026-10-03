@@ -68,6 +68,31 @@ def build_chart_context(settings: Settings, symbol: str) -> ChartContextSnapshot
         notes.append(
             "GEX unavailable: spot or option data request failed. No prior ticker is substituted."
         )
+    volume_profile = None
+    structural = None
+    try:
+        if completed:
+            from regimeshift.domain.levels import (
+                calculate_structural_levels,
+                calculate_volume_profile,
+            )
+
+            volume_profile = calculate_volume_profile(completed)
+            structural = calculate_structural_levels(completed)
+    except Exception:
+        notes.append("Volume profile or structural levels calculation failed.")
+
+    iv_levels = None
+    if spot and micro and micro.average_iv:
+        try:
+            from regimeshift.domain.levels import calculate_iv_levels
+
+            iv_levels = calculate_iv_levels(
+                spot, micro.average_iv, dte=7, daily_bars=completed if completed else None
+            )
+        except Exception:
+            notes.append("IV levels calculation failed.")
+
     status = (
         "available"
         if swing is not None and micro is not None
@@ -84,6 +109,9 @@ def build_chart_context(settings: Settings, symbol: str) -> ChartContextSnapshot
         swing=swing,
         swing_as_of=swing_as_of,
         options_microstructure=micro,
+        iv_levels=iv_levels,
+        volume_profile=volume_profile,
+        structural_levels=structural,
         notes=notes,
     )
 

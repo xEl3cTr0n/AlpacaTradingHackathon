@@ -4,7 +4,7 @@ export function PriceChart({ prices, symbol }: { prices: PricePoint[]; symbol: s
   const width = 760;
   const height = 250;
   const padding = 10;
-  const visible = prices.slice(-64);
+  const visible = prices.length ? prices.slice(-250) : [];
   const values = visible.map((point) => point.close);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -62,7 +62,7 @@ export function PriceChart({ prices, symbol }: { prices: PricePoint[]; symbol: s
       </svg>
       <div className="chart-axis" aria-hidden="true">
         <span>${min.toFixed(2)}</span>
-        <span>64 sessions</span>
+        <span>{visible.length} sessions</span>
         <span>${max.toFixed(2)}</span>
       </div>
       <details className="accessible-data">

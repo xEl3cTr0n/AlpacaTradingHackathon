@@ -112,6 +112,11 @@ class AlpacaOptionsProvider:
                         "gamma": greeks.gamma if greeks else None,
                         "delta": greeks.delta if greeks else None,
                         "vega": greeks.vega if greeks else None,
+                        "implied_volatility": (
+                            float(snapshot.implied_volatility)
+                            if snapshot and snapshot.implied_volatility is not None
+                            else None
+                        ),
                         # Alpaca's chain snapshot has no aggregate contract volume.
                         "volume": None,
                     }

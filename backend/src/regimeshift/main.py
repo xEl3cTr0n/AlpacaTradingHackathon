@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
@@ -28,6 +29,7 @@ from regimeshift.domain.models import (
 from regimeshift.domain.options_thesis import build_options_thesis
 from regimeshift.domain.scanner import LARGE_CAP_UNIVERSE, LargeCapScanner
 from regimeshift.domain.scanner_diagnostics import NEW_YORK, aware
+from regimeshift.domain.sector_scanner import SectorScanSnapshot
 from regimeshift.domain.volume_rsi import volume_rsi_series
 from regimeshift.orchestration.pipeline import DecisionPipeline
 from regimeshift.services.chart_context import get_chart_context
@@ -36,6 +38,9 @@ from regimeshift.services.manual_trading import ManualPaperTrader
 from regimeshift.services.market_data import MarketDataProvider, build_market_data_provider
 from regimeshift.services.options_data import build_options_provider
 from regimeshift.services.platform import build_platform_provider
+from regimeshift.services.sector_scanner import get_sector_scan
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="RegimeShift AI API",
@@ -83,8 +88,9 @@ def _analyze(
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Market data request failed")
         raise HTTPException(
-            status_code=502, detail=f"Market data request failed: {error}"
+            status_code=502, detail="Market data request failed; retry shortly"
         ) from error
 
 
@@ -109,8 +115,9 @@ def platform(settings: SettingsDependency) -> PlatformSnapshot:
     except ValueError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Paper account request failed")
         raise HTTPException(
-            status_code=502, detail=f"Paper account request failed: {error}"
+            status_code=502, detail="Paper account request failed; retry shortly"
         ) from error
 
 
@@ -124,7 +131,20 @@ def live_tape(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Live tape request failed: {error}") from error
+        logger.exception("Live tape request failed")
+        raise HTTPException(
+            status_code=502, detail="Live tape request failed; retry shortly"
+        ) from error
+
+
+@app.get("/api/v1/sector-scanner", response_model=SectorScanSnapshot)
+def sector_scanner(settings: SettingsDependency) -> SectorScanSnapshot:
+    try:
+        return get_sector_scan(settings)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502, detail="Sector scanner unavailable; retry shortly"
+        ) from error
 
 
 @app.get("/api/v1/chart", response_model=ChartSnapshot)
@@ -132,7 +152,7 @@ def chart(
     settings: SettingsDependency,
     symbol: str = Query(default="SPY", min_length=1, max_length=10, pattern=r"^[A-Za-z.]+$"),
     timeframe: str = Query(default="5Min", pattern=r"^(1Min|5Min|15Min|1Day)$"),
-    limit: int = Query(default=300, ge=50, le=500),
+    limit: int = Query(default=500, ge=50, le=2000),
     rsi_low_vol_filter: bool = False,
 ) -> ChartSnapshot:
     try:
@@ -177,8 +197,9 @@ def chart(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Chart data request failed")
         raise HTTPException(
-            status_code=502, detail=f"Chart data request failed: {error}"
+            status_code=502, detail="Chart data request failed; retry shortly"
         ) from error
 
 
@@ -212,8 +233,9 @@ def option_chain(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Option chain request failed")
         raise HTTPException(
-            status_code=502, detail=f"Option chain request failed: {error}"
+            status_code=502, detail="Option chain request failed; retry shortly"
         ) from error
 
 
@@ -246,8 +268,9 @@ def scanner_options_thesis(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Options thesis request failed")
         raise HTTPException(
-            status_code=502, detail=f"Options thesis request failed: {error}"
+            status_code=502, detail="Options thesis request failed; retry shortly"
         ) from error
 
 
@@ -348,8 +371,9 @@ def evaluate_scanner_candidate(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Scanner evaluation failed")
         raise HTTPException(
-            status_code=502, detail=f"Scanner evaluation failed: {error}"
+            status_code=502, detail="Scanner evaluation failed; retry shortly"
         ) from error
 
 
@@ -362,8 +386,9 @@ def preview_manual_trade(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Option quote request failed")
         raise HTTPException(
-            status_code=502, detail=f"Option quote request failed: {error}"
+            status_code=502, detail="Option quote request failed; retry shortly"
         ) from error
 
 
@@ -380,7 +405,8 @@ def execute_manual_trade(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Paper order failed: {error}") from error
+        logger.exception("Paper order failed")
+        raise HTTPException(status_code=502, detail="Paper order failed; retry shortly") from error
 
 
 @app.get("/api/v1/scanner", response_model=ScannerSnapshot)
@@ -395,6 +421,7 @@ def scanner(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Scanner market-data request failed")
         raise HTTPException(
-            status_code=502, detail=f"Scanner market-data request failed: {error}"
+            status_code=502, detail="Scanner market-data request failed; retry shortly"
         ) from error

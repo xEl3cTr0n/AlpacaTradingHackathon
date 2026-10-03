@@ -74,6 +74,8 @@ class RotationPhase(StrEnum):
 class ScannerPattern(StrEnum):
     BULLISH_18EMA_CROSS = "bullish_18ema_cross"
     BEARISH_18EMA_CROSS = "bearish_18ema_cross"
+    BULLISH_TREND_CONTINUATION = "bullish_trend_continuation"
+    BEARISH_TREND_CONTINUATION = "bearish_trend_continuation"
     BULLISH_TREND_WATCH = "bullish_trend_watch"
     BEARISH_TREND_WATCH = "bearish_trend_watch"
     NO_SETUP = "no_setup"
@@ -209,6 +211,15 @@ class GexStrike(BaseModel):
     call_gex: float = Field(ge=0)
     put_gex: float = Field(le=0)
     net_gex: float
+    call_oi: int = Field(default=0, ge=0)
+    put_oi: int = Field(default=0, ge=0)
+    total_oi: int = Field(default=0, ge=0)
+    call_volume: int = Field(default=0, ge=0)
+    put_volume: int = Field(default=0, ge=0)
+    total_volume: int = Field(default=0, ge=0)
+    call_iv: float | None = Field(default=None, ge=0)
+    put_iv: float | None = Field(default=None, ge=0)
+    average_iv: float | None = Field(default=None, ge=0)
 
 
 class OptionsMicrostructureAssessment(BaseModel):
@@ -230,6 +241,7 @@ class OptionsMicrostructureAssessment(BaseModel):
     key_delta_strike: float | None = Field(default=None, gt=0)
     hedge_wall: float | None = Field(default=None, gt=0)
     gamma_regime: GammaRegime
+    average_iv: float | None = Field(default=None, ge=0)
     data_quality: float = Field(ge=0, le=1)
     rationale: str
     evidence: list[str]
@@ -455,6 +467,13 @@ class ScannerCandidate(BaseModel):
     move_thesis: PotentialMoveThesis
     diagnostics: ScannerDiagnostics | None = None
     evidence: list[str]
+    lifecycle_stage: Literal["heads_up", "confirmed", "watch", "invalidated"] = "watch"
+    confirmation_time: datetime | None = None
+    sector_agreement: Literal["agrees", "disagrees", "neutral"] = "neutral"
+    sector_disagreement_override: bool = False
+    invalidation_price: float | None = None
+    target_price: float | None = None
+    rejection_reasons: list[str] = Field(default_factory=list)
 
 
 class ScannerSnapshot(BaseModel):
@@ -574,6 +593,44 @@ class ChartSnapshot(BaseModel):
     volume_rsi_signals: list[VolumeRsiReading] = Field(default_factory=list)
 
 
+class IvLevels(BaseModel):
+    upper_1s: float | None = None
+    lower_1s: float | None = None
+    upper_2s: float | None = None
+    lower_2s: float | None = None
+    average_iv: float | None = None
+    expected_move: float | None = None
+    session_expected_move: float | None = None
+    session_upper: float | None = None
+    session_lower: float | None = None
+    prior_day_high: float | None = None
+    prior_day_low: float | None = None
+    prior_day_close: float | None = None
+
+
+class VolumeProfileLevels(BaseModel):
+    poc: float | None = None
+    vah: float | None = None
+    val: float | None = None
+
+
+class IchimokuCloudPoint(BaseModel):
+    timestamp: datetime
+    tenkan_sen: float | None = None
+    kijun_sen: float | None = None
+    senkou_span_a: float | None = None
+    senkou_span_b: float | None = None
+    chikou_span: float | None = None
+
+
+class StructuralLevels(BaseModel):
+    kijun_sen: float | None = None
+    tenkan_sen: float | None = None
+    senkou_span_b: float | None = None
+    session_vwap: float | None = None
+    ichimoku_series: list[IchimokuCloudPoint] = Field(default_factory=list)
+
+
 class ChartContextSnapshot(BaseModel):
     symbol: str
     generated_at: datetime
@@ -584,6 +641,9 @@ class ChartContextSnapshot(BaseModel):
     swing_as_of: datetime | None = None
     swing: SwingAssessment | None = None
     options_microstructure: OptionsMicrostructureAssessment | None = None
+    iv_levels: IvLevels | None = None
+    volume_profile: VolumeProfileLevels | None = None
+    structural_levels: StructuralLevels | None = None
     notes: list[str] = Field(default_factory=list)
 
 

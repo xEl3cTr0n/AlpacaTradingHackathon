@@ -10,9 +10,11 @@ import type {
   UTCTimestamp,
 } from "lightweight-charts";
 import type { ChartContextSnapshot, ChartSnapshot, DecisionSnapshot, LiveMarketTick, PricePoint } from "@/lib/types";
-import { chartContextLevels, matchingChartContext } from "@/lib/chart-context";
+import { chartContextLevels, matchingChartContext, targetCorridorSummary } from "@/lib/chart-context";
 import { ChartContextPanel } from "./chart-context-panel";
+import { ChartFreshness } from "./chart-freshness";
 import { useWorkspacePreferences } from "@/lib/use-workspace-preferences";
+import { IchimokuCloudPrimitive } from "@/lib/ichimoku-cloud-plugin";
 
 type Timeframe = ChartSnapshot["timeframe"];
 
@@ -48,6 +50,66 @@ function ema(points: PricePoint[], period: number) {
   });
 }
 
+function ichimoku(points: PricePoint[]) {
+  const tenkanData: { time: UTCTimestamp; value: number }[] = [];
+  const kijunData: { time: UTCTimestamp; value: number }[] = [];
+  const spanAData: { time: UTCTimestamp; value: number }[] = [];
+  const spanBData: { time: UTCTimestamp; value: number }[] = [];
+  const chikouData: { time: UTCTimestamp; value: number }[] = [];
+  const cloudData: { time: UTCTimestamp; spanA: number; spanB: number }[] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const t = toTime(points[i].timestamp);
+    chikouData.push({ time: t, value: points[i].close });
+
+    if (i >= 8) {
+      let high9 = -Infinity;
+      let low9 = Infinity;
+      for (let j = i - 8; j <= i; j++) {
+        const h = points[j].high ?? points[j].close;
+        const l = points[j].low ?? points[j].close;
+        if (h > high9) high9 = h;
+        if (l < low9) low9 = l;
+      }
+      const tVal = +((high9 + low9) / 2).toFixed(2);
+      tenkanData.push({ time: t, value: tVal });
+
+      if (i >= 25) {
+        let high26 = -Infinity;
+        let low26 = Infinity;
+        for (let j = i - 25; j <= i; j++) {
+          const h = points[j].high ?? points[j].close;
+          const l = points[j].low ?? points[j].close;
+          if (h > high26) high26 = h;
+          if (l < low26) low26 = l;
+        }
+        const kVal = +((high26 + low26) / 2).toFixed(2);
+        kijunData.push({ time: t, value: kVal });
+        const aVal = +((tVal + kVal) / 2).toFixed(2);
+        spanAData.push({ time: t, value: aVal });
+
+        // Span B: 52 period midpoint (or maximum window up to 52 once past Kijun 26)
+        const bLookback = Math.min(i, 51);
+        let high52 = -Infinity;
+        let low52 = Infinity;
+        for (let j = i - bLookback; j <= i; j++) {
+          const h = points[j].high ?? points[j].close;
+          const l = points[j].low ?? points[j].close;
+          if (h > high52) high52 = h;
+          if (l < low52) low52 = l;
+        }
+        const bVal = +((high52 + low52) / 2).toFixed(2);
+        if (i >= 51) {
+          spanBData.push({ time: t, value: bVal });
+        }
+        cloudData.push({ time: t, spanA: aVal, spanB: bVal });
+      }
+    }
+  }
+
+  return { tenkanData, kijunData, spanAData, spanBData, chikouData, cloudData };
+}
+
 export function MarketChartTerminal({
   snapshot,
   tick,
@@ -77,7 +139,9 @@ export function MarketChartTerminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const visibleRangeRef = useRef<{ key: string; range: LogicalRange } | null>(null);
-  const key = `/api/v1/chart?symbol=${encodeURIComponent(chartSymbol)}&timeframe=${timeframe}&limit=300&rsi_low_vol_filter=${rsiLowVolFilter}`;
+  const candleLimit = preferences.candleLimit ?? 500;
+  const setCandleLimit = (value: typeof candleLimit) => updatePreferences({ candleLimit: value });
+  const key = `/api/v1/chart?symbol=${encodeURIComponent(chartSymbol)}&timeframe=${timeframe}&limit=${candleLimit}&rsi_low_vol_filter=${rsiLowVolFilter}`;
   const { data, error, isLoading, isValidating, mutate } = useSWR(key, fetcher, {
     refreshInterval: timeframe === "1Min" ? 30_000 : 60_000,
     dedupingInterval: 15_000,
@@ -102,7 +166,16 @@ export function MarketChartTerminal({
       refreshWhenHidden: false, refreshWhenOffline: false, errorRetryCount: 1 },
   );
   const context = matchingChartContext(chartSymbol, contextData, Boolean(contextError));
-  const overlayLevels = useMemo(() => preferences.showLevels ? chartContextLevels(context) : [], [context, preferences.showLevels]);
+  const targets = useMemo(() => targetCorridorSummary(context), [context]);
+  const overlayLevels = useMemo(() => {
+    if (!preferences.showLevels) return [];
+    const allLevels = chartContextLevels(context);
+    if (!preferences.showTargets) {
+      return allLevels.filter((lvl) => !lvl.title.includes("Session") && !lvl.title.includes("Weekly") && !lvl.title.includes("Extreme") && !lvl.title.includes("Prior Day"));
+    }
+    return allLevels;
+  }, [context, preferences.showLevels, preferences.showTargets]);
+
   const bars = useMemo(
     () => data?.bars ?? (timeframe === "1Day" && chartSymbol === snapshot.market.symbol ? snapshot.market.prices : []),
     [data?.bars, snapshot.market.prices, snapshot.market.symbol, timeframe, chartSymbol],
@@ -211,12 +284,116 @@ export function MarketChartTerminal({
         ema18.setData(ema(bars, 18));
         ema50.setData(ema(bars, 50));
 
+        // Full 5-Line Ichimoku Suite
+        if (preferences.showIchimoku) {
+          const cloud = bars.length >= 9 ? ichimoku(bars) : null;
+          const backendSeries = context?.structural_levels?.ichimoku_series;
+          const hasCloud = cloud && cloud.tenkanData.length > 0;
+          const hasBackend = (backendSeries?.length ?? 0) > 0;
+
+          if (hasCloud || hasBackend) {
+            const tenkan = chart.addSeries(LineSeries, {
+              color: "#38bdf8",
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: "Tenkan (9)",
+            });
+            const kijun = chart.addSeries(LineSeries, {
+              color: "#ec4899",
+              lineWidth: 2,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: "Kijun (26)",
+            });
+            const spanA = chart.addSeries(LineSeries, {
+              color: "#34d399",
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: "Span A",
+            });
+            const spanB = chart.addSeries(LineSeries, {
+              color: "#f43f5e",
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: "Span B",
+            });
+            const chikou = chart.addSeries(LineSeries, {
+              color: "#c084fc",
+              lineWidth: 1,
+              lineStyle: LineStyle.Dashed,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: "Chikou",
+            });
+
+            if (hasCloud) {
+              if (cloud.cloudData.length > 1) {
+                const cloudPrimitive = new IchimokuCloudPrimitive(cloud.cloudData);
+                candles.attachPrimitive(cloudPrimitive);
+              }
+              tenkan.setData(cloud.tenkanData);
+              kijun.setData(cloud.kijunData);
+              spanA.setData(cloud.spanAData);
+              spanB.setData(cloud.spanBData);
+              chikou.setData(cloud.chikouData);
+            } else if (hasBackend && backendSeries) {
+              const backendCloud = backendSeries
+                .filter((pt) => pt.senkou_span_a != null && pt.senkou_span_b != null)
+                .map((pt) => ({ time: toTime(pt.timestamp), spanA: pt.senkou_span_a!, spanB: pt.senkou_span_b! }));
+              if (backendCloud.length > 1) {
+                const cloudPrimitive = new IchimokuCloudPrimitive(backendCloud);
+                candles.attachPrimitive(cloudPrimitive);
+              }
+              tenkan.setData(
+                backendSeries
+                  .filter((pt) => pt.tenkan_sen != null)
+                  .map((pt) => ({ time: toTime(pt.timestamp), value: pt.tenkan_sen! }))
+              );
+              kijun.setData(
+                backendSeries
+                  .filter((pt) => pt.kijun_sen != null)
+                  .map((pt) => ({ time: toTime(pt.timestamp), value: pt.kijun_sen! }))
+              );
+              spanA.setData(
+                backendSeries
+                  .filter((pt) => pt.senkou_span_a != null)
+                  .map((pt) => ({ time: toTime(pt.timestamp), value: pt.senkou_span_a! }))
+              );
+              spanB.setData(
+                backendSeries
+                  .filter((pt) => pt.senkou_span_b != null)
+                  .map((pt) => ({ time: toTime(pt.timestamp), value: pt.senkou_span_b! }))
+              );
+              chikou.setData(
+                backendSeries
+                  .filter((pt) => pt.chikou_span != null)
+                  .map((pt) => ({ time: toTime(pt.timestamp), value: pt.chikou_span! }))
+              );
+            }
+          }
+        }
+
         for (const { title, price, color, dashed } of overlayLevels) {
           candles.createPriceLine({ price, color, lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid, lineWidth: 1, title });
         }
         const previousView = visibleRangeRef.current;
-        if (previousView?.key === viewKey) chart.timeScale().setVisibleLogicalRange(previousView.range);
-        else chart.timeScale().fitContent();
+        if (previousView?.key === viewKey) {
+          chart.timeScale().setVisibleLogicalRange(previousView.range);
+        } else {
+          if (bars.length > 120) {
+            chart.timeScale().setVisibleLogicalRange({
+              from: bars.length - 120,
+              to: bars.length + 5,
+            });
+          } else {
+            chart.timeScale().fitContent();
+          }
+        }
         chartRef.current = chart;
         resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: containerRef.current?.clientWidth, height: containerRef.current?.clientHeight }));
         resizeObserver.observe(containerRef.current);
@@ -230,7 +407,7 @@ export function MarketChartTerminal({
       ownedChart?.remove();
       if (chartRef.current === ownedChart) chartRef.current = null;
     };
-  }, [bars, chartSymbol, overlayLevels, timeframe, data?.volume_rsi_signals, rsiMode, renderAttempt]);
+  }, [bars, chartSymbol, overlayLevels, timeframe, data?.volume_rsi_signals, rsiMode, renderAttempt, preferences.showIchimoku, context]);
 
   // Display tape independently: quotes are not OHLC bars, and an old trade
   // must never rewrite newer history or fabricate a daily/session candle.
@@ -239,6 +416,22 @@ export function MarketChartTerminal({
     if (/^[A-Z.]{1,10}$/.test(normalized)) {
       setLocalSymbol(normalized);
       onSymbolChange?.(normalized);
+    }
+  };
+
+  const handleFitAll = () => {
+    chartRef.current?.timeScale().fitContent();
+  };
+
+  const handleResetRecent = () => {
+    if (!chartRef.current || !bars.length) return;
+    if (bars.length > 120) {
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: bars.length - 120,
+        to: bars.length + 5,
+      });
+    } else {
+      chartRef.current.timeScale().fitContent();
     }
   };
 
@@ -266,9 +459,55 @@ export function MarketChartTerminal({
             </button>
           ))}
         </div>
+        <div className="range-tabs candle-depth-tabs" aria-label="Candle count history">
+          {([100, 300, 500, 1000] as const).map((count) => (
+            <button
+              key={count}
+              type="button"
+              className={candleLimit === count ? "active" : ""}
+              aria-pressed={candleLimit === count}
+              title={`Load ${count} candles of history`}
+              onClick={() => setCandleLimit(count)}
+            >
+              {count}b
+            </button>
+          ))}
+        </div>
+        <div className="chart-view-actions">
+          <button
+            type="button"
+            className={`chart-toggle-btn ${preferences.showTargets ? "active" : ""}`}
+            onClick={() => updatePreferences({ showTargets: !preferences.showTargets })}
+            title="Toggle Implied Move Targets & Corridors"
+          >
+            🎯 Targets
+          </button>
+          <button
+            type="button"
+            className={`chart-toggle-btn ${preferences.showIchimoku ? "active" : ""}`}
+            onClick={() => updatePreferences({ showIchimoku: !preferences.showIchimoku })}
+            title="Toggle Full 5-Line Ichimoku Cloud"
+          >
+            ☁️ Ichimoku
+          </button>
+          <button type="button" onClick={handleResetRecent} title="Focus on most recent candles">Recent</button>
+          <button type="button" onClick={handleFitAll} title="Fit entire historical dataset on screen">Fit All</button>
+        </div>
         {compact && <label className="quote-refresh-control">Quotes<select value={preferences.quoteSeconds} onChange={(event) => updatePreferences({ quoteSeconds: Number(event.target.value) as 0 | 1 | 5 | 10 })}><option value={0}>Paused</option><option value={1}>1s</option><option value={5}>5s</option><option value={10}>10s</option></select></label>}
       </div>
-      <details className="chart-indicators"><summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {overlayLevels.length} automatic levels</summary><div className="chart-rsi-controls"><label><input type="checkbox" checked={preferences.showLevels} onChange={(event) => updatePreferences({ showLevels: event.target.checked })} /> GEX &amp; swing levels</label><label><input type="checkbox" checked={preferences.showGex} onChange={(event) => updatePreferences({ showGex: event.target.checked })} /> GEX profile</label><label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label><label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label><p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p></div></details>
+      <ChartFreshness tradeAt={activeTick?.as_of} barAt={latest?.timestamp} timeframe={timeframe} quoteSeconds={quoteRefreshMs / 1000} failed={Boolean(tickError)} />
+      <details className="chart-indicators">
+        <summary>Indicators · EMA 18 / 50 · RSI {rsiMode} · {overlayLevels.length} automatic levels</summary>
+        <div className="chart-rsi-controls">
+          <label><input type="checkbox" checked={preferences.showTargets} onChange={(event) => updatePreferences({ showTargets: event.target.checked })} /> 🎯 Implied move targets</label>
+          <label><input type="checkbox" checked={preferences.showIchimoku} onChange={(event) => updatePreferences({ showIchimoku: event.target.checked })} /> ☁️ Ichimoku Cloud (Tenkan, Kijun, Spans A/B)</label>
+          <label><input type="checkbox" checked={preferences.showLevels} onChange={(event) => updatePreferences({ showLevels: event.target.checked })} /> GEX &amp; swing levels</label>
+          <label><input type="checkbox" checked={preferences.showGex} onChange={(event) => updatePreferences({ showGex: event.target.checked })} /> GEX profile</label>
+          <label>RSI + volume markers<select value={rsiMode} onChange={(event) => setRsiMode(event.target.value as typeof rsiMode)}><option value="off">Off</option><option value="raw">Original · all extremes</option><option value="quiet">Quiet · one per excursion</option><option value="reversal">Price-confirmed reversals</option></select></label>
+          <label><input type="checkbox" checked={rsiLowVolFilter} onChange={(event) => setRsiLowVolFilter(event.target.checked)} /> Low-vol filter · ATR/price ≥0.5%</label>
+          <p>OB / OS = extreme + volume, not guaranteed tops / bottoms. Closed bars only; research, not orders.</p>
+        </div>
+      </details>
       <div className="chart-stat-strip">
         <span>O <b>{latest?.open?.toFixed(2) ?? "—"}</b></span>
         <span>H <b>{latest?.high?.toFixed(2) ?? "—"}</b></span>
@@ -276,15 +515,69 @@ export function MarketChartTerminal({
         <span>C <b>{latest?.close.toFixed(2) ?? "—"}</b></span>
         <span>Range <b>{range ? `${range.low.toFixed(2)}–${range.high.toFixed(2)}` : "—"}</b></span>
         <span>Bar Δ <b className={(change ?? 0) >= 0 ? "positive" : "negative"}>{change == null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`}</b></span>
+        <span>Bars <b>{bars.length}</b></span>
+        {bars.length > 0 && (
+          <span>Span <b>{new Date(bars[0].timestamp).toLocaleDateString()} → {new Date(bars.at(-1)!.timestamp).toLocaleDateString()}</b></span>
+        )}
       </div>
       <div className="trading-chart-shell">
         {isLoading && !bars.length && <div className="chart-placeholder"><BarChart3 size={22} aria-hidden="true" /> Loading Alpaca bars…</div>}
         {(error || renderError) && <div className="chart-feed-error" role="alert">{renderError ? "Chart renderer unavailable." : "Bar refresh failed; displayed history may be stale."} <button type="button" onClick={() => { if (renderError) setRenderAttempt((value) => value + 1); void mutate(); }}>Retry chart</button></div>}
         {!isLoading && !error && !bars.length && <div className="chart-placeholder">No bars returned. Choose another ticker or timeframe.</div>}
         <div ref={containerRef} className="trading-chart" />
+
+        {preferences.showTargets && targets.spot != null && (
+          <div className="chart-target-hud" aria-label="Implied Move and Targets HUD">
+            <div className="target-hud-header">
+              <div className="hud-title">
+                <span>🎯 TARGET CORRIDOR</span>
+                <strong>${targets.spot.toFixed(2)}</strong>
+              </div>
+              <div className="hud-moves">
+                {targets.dailyExpectedMove != null && (
+                  <span className="move-chip daily">1D: ±${targets.dailyExpectedMove.toFixed(2)} ({targets.dailyPct}%)</span>
+                )}
+                {targets.weeklyExpectedMove != null && (
+                  <span className="move-chip weekly">7D: ±${targets.weeklyExpectedMove.toFixed(2)} ({targets.weeklyPct}%)</span>
+                )}
+              </div>
+            </div>
+            <div className="target-hud-levels">
+              {targets.dailyUpper != null && (
+                <div className="hud-level-item bull">
+                  <span>Bull Target</span>
+                  <strong>${targets.dailyUpper.toFixed(2)}</strong>
+                  <small>+{targets.dailyPct}%</small>
+                </div>
+              )}
+              {targets.dailyLower != null && (
+                <div className="hud-level-item bear">
+                  <span>Bear Target</span>
+                  <strong>${targets.dailyLower.toFixed(2)}</strong>
+                  <small>-{targets.dailyPct}%</small>
+                </div>
+              )}
+              {targets.callWall != null && (
+                <div className="hud-level-item call-wall">
+                  <span>Call Wall</span>
+                  <strong>${targets.callWall.toFixed(2)}</strong>
+                  <small>Resistance</small>
+                </div>
+              )}
+              {targets.putWall != null && (
+                <div className="hud-level-item put-wall">
+                  <span>Put Wall</span>
+                  <strong>${targets.putWall.toFixed(2)}</strong>
+                  <small>Support</small>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <div className="chart-terminal-foot">
         <span>{isValidating ? "Updating bars…" : data?.source ?? snapshot.market.source}</span>
+        <span>{bars.length} {timeframe} candles · Drag or scroll to inspect history</span>
         <span>{tickError ? "Tape unavailable" : activeTick ? `Tape as of ${new Date(activeTick.as_of).toLocaleString()}` : "No tape yet"}</span>
         <span>Quotes {quoteRefreshMs > 0 ? `${quoteRefreshMs / 1000}s` : "paused"} · bars {timeframe === "1Min" ? "30s" : "60s"}</span>
         <span>EMA 18 <i className="legend-cyan" /> EMA 50 <i className="legend-amber" /></span>

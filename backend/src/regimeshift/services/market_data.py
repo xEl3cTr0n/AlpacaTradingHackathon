@@ -60,20 +60,22 @@ class DemoMarketDataProvider:
         return {symbol.upper(): self._get_prices(symbol, days) for symbol in symbols}
 
     def get_chart_history(
-        self, symbol: str, timeframe: str, limit: int = 300
+        self, symbol: str, timeframe: str, limit: int = 500
     ) -> list[PricePoint]:
         if timeframe == "1Day":
-            return self._get_prices(symbol, days=max(180, limit * 2))[-limit:]
+            return self._get_prices(symbol, days=max(250, int(limit * 1.5)))[-limit:]
         minutes = {"1Min": 1, "5Min": 5, "15Min": 15}.get(timeframe)
         if minutes is None:
             raise ValueError("Timeframe must be 1Min, 5Min, 15Min, or 1Day")
-        days = max(10, math.ceil(limit / 26))
-        return self.get_intraday_history([symbol], days, minutes)[symbol.upper()][-limit:]
+        bars_per_day = 390 // minutes
+        days = max(10, math.ceil(limit / bars_per_day) + 2)
+        return self.get_intraday_history([symbol], days, minutes, min_count=limit)[symbol.upper()][-limit:]
 
     def get_intraday_history(
-        self, symbols: list[str], days: int = 10, bar_minutes: int = 15
+        self, symbols: list[str], days: int = 10, bar_minutes: int = 15, min_count: int = 100
     ) -> dict[str, list[PricePoint]]:
-        count = max(100, days * 26)
+        bars_per_day = 390 // bar_minutes if bar_minutes <= 390 else 26
+        count = max(min_count, days * bars_per_day)
         end = datetime.now(UTC).replace(second=0, microsecond=0)
         output: dict[str, list[PricePoint]] = {}
         for symbol in symbols:
@@ -99,7 +101,7 @@ class DemoMarketDataProvider:
 
     def get_context(self, symbol: str) -> MarketContext:
         symbol = symbol.upper()
-        points = self._get_prices(symbol)
+        points = self._get_prices(symbol, days=365)
         change = ((points[-1].close / points[-2].close) - 1) * 100
         return MarketContext(
             symbol=symbol,
@@ -107,7 +109,7 @@ class DemoMarketDataProvider:
             source="deterministic demo tape",
             current_price=points[-1].close,
             price_change_pct=round(change, 2),
-            prices=points,
+            prices=points[-250:],
             headlines=[
                 f"{symbol} liquidity remains firm as investors assess the next macro catalyst",
                 "Options markets price a wider range of outcomes into the coming sessions",
@@ -176,22 +178,28 @@ class AlpacaMarketDataProvider:
         return histories
 
     def get_chart_history(
-        self, symbol: str, timeframe: str, limit: int = 300
+        self, symbol: str, timeframe: str, limit: int = 500
     ) -> list[PricePoint]:
         from alpaca.common.enums import Sort
         from alpaca.data.enums import Adjustment, DataFeed
         from alpaca.data.requests import StockBarsRequest
         from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
-        timeframe_map = {
-            "1Min": (TimeFrame.Minute, 7),
-            "5Min": (TimeFrame(5, TimeFrameUnit.Minute), 14),
-            "15Min": (TimeFrame(15, TimeFrameUnit.Minute), 30),
-            "1Day": (TimeFrame.Day, max(730, limit * 2)),
-        }
-        if timeframe not in timeframe_map:
+        if timeframe == "1Min":
+            alpaca_timeframe = TimeFrame.Minute
+            calendar_days = max(7, math.ceil(limit / 350) + 3)
+        elif timeframe == "5Min":
+            alpaca_timeframe = TimeFrame(5, TimeFrameUnit.Minute)
+            calendar_days = max(14, math.ceil(limit / 70) + 5)
+        elif timeframe == "15Min":
+            alpaca_timeframe = TimeFrame(15, TimeFrameUnit.Minute)
+            calendar_days = max(30, math.ceil(limit / 22) + 7)
+        elif timeframe == "1Day":
+            alpaca_timeframe = TimeFrame.Day
+            calendar_days = max(730, int(limit * 1.5))
+        else:
             raise ValueError("Timeframe must be 1Min, 5Min, 15Min, or 1Day")
-        alpaca_timeframe, calendar_days = timeframe_map[timeframe]
+
         symbol = symbol.upper()
         end = datetime.now(UTC)
         bar_set = self.stock_client.get_stock_bars(
@@ -282,6 +290,10 @@ class AlpacaMarketDataProvider:
         bar_set = self.stock_client.get_stock_bars(request)
         histories: dict[str, list[PricePoint]] = {}
         for symbol in normalized:
+            try:
+                symbol_bars = bar_set[symbol]
+            except KeyError:
+                symbol_bars = []
             histories[symbol] = [
                 PricePoint(
                     timestamp=bar.timestamp,
@@ -291,7 +303,7 @@ class AlpacaMarketDataProvider:
                     close=float(bar.close),
                     volume=int(bar.volume),
                 )
-                for bar in bar_set[symbol]
+                for bar in symbol_bars
             ]
         return histories
 
@@ -299,7 +311,7 @@ class AlpacaMarketDataProvider:
         from alpaca.data.requests import NewsRequest
 
         symbol = symbol.upper()
-        points = self.get_price_history([symbol])[symbol]
+        points = self.get_price_history([symbol], days=365)[symbol]
         if len(points) < 55:
             raise ValueError(f"Alpaca returned only {len(points)} daily bars for {symbol}")
 
@@ -314,7 +326,7 @@ class AlpacaMarketDataProvider:
             source="Alpaca Market Data API",
             current_price=round(points[-1].close, 2),
             price_change_pct=round(change, 2),
-            prices=points[-100:],
+            prices=points[-250:],
             headlines=headlines,
         )
 

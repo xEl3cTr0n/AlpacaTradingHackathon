@@ -28,6 +28,7 @@ def managed_exit_plan(
     current_direction: Direction | None = None,
     stop_loss_fraction: float = 0.50,
     now: datetime | None = None,
+    min_days_to_expiry: int | None = None,
 ) -> dict[str, Any] | None:
     """Build an exit for an identified, complete RegimeShift debit spread.
 
@@ -92,15 +93,47 @@ def managed_exit_plan(
     unrealized_pnl = sum(profits)
     expected_direction = Direction.BULLISH if details[0][2] == "C" else Direction.BEARISH
     timestamp = now or datetime.now(UTC)
-    days_to_expiry = (details[0][1].date() - timestamp.date()).days
+    expiry_date = details[0][1].date()
+    days_to_expiry = (expiry_date - timestamp.date()).days
+
+    entry_timestamp_raw = (
+        entry.get("filled_at")
+        or entry.get("submitted_at")
+        or entry.get("created_at")
+    )
+    entry_dte = None
+    if entry_timestamp_raw:
+        try:
+            entry_dt = datetime.fromisoformat(str(entry_timestamp_raw).replace("Z", "+00:00"))
+            entry_dte = (expiry_date - entry_dt.date()).days
+        except Exception:
+            entry_dte = None
+    if entry_dte is None and "entry_dte" in entry:
+        try:
+            entry_dte = int(entry["entry_dte"])
+        except (TypeError, ValueError):
+            entry_dte = None
+
+    if min_days_to_expiry is not None:
+        expiry_cutoff = min_days_to_expiry
+    elif entry_dte is not None and entry_dte <= 7:
+        expiry_cutoff = 1
+    elif entry.get("horizon") in ("weekly", "short_dated", "intraday"):
+        expiry_cutoff = 1
+    else:
+        expiry_cutoff = 7
 
     reasons: list[str] = []
     if maximum_reward > 0 and unrealized_pnl >= maximum_reward * 0.50:
         reasons.append("50% profit target reached")
     if unrealized_pnl <= -maximum_loss * stop_loss_fraction:
         reasons.append(f"{stop_loss_fraction:.0%} maximum-loss stop reached")
-    if days_to_expiry <= 7:
-        reasons.append("expiration is within 7 days")
+    is_entry_day = entry_dte is not None and days_to_expiry >= entry_dte
+    if not is_entry_day and days_to_expiry <= expiry_cutoff:
+        reasons.append(
+            f"expiration is within {expiry_cutoff} day{'s' if expiry_cutoff != 1 else ''}"
+            if expiry_cutoff > 0 else "expiration day reached"
+        )
     if current_direction in {Direction.BULLISH, Direction.BEARISH} and (
         current_direction != expected_direction
     ):

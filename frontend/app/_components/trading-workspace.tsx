@@ -10,6 +10,7 @@ import { useWorkspacePreferences } from "@/lib/use-workspace-preferences";
 import type { DecisionSnapshot, PlatformSnapshot, ScannerSnapshot } from "@/lib/types";
 import { ScannerFilterBar } from "./scanner-workbench";
 import { TradingDock } from "./trading-dock";
+import { SectorDetail, SectorRail } from "./sector-scanner";
 
 const MarketChartTerminal = dynamic(() => import("./market-chart-terminal").then((m) => m.MarketChartTerminal), {
   ssr: false, loading: () => <div className="chart-placeholder">Loading chart workspace…</div>,
@@ -28,6 +29,7 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
 }) {
   const [preferences, updatePreferences] = useWorkspacePreferences();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [sector, setSector] = useState("XLK");
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const filterDialog = useRef<HTMLDialogElement>(null);
@@ -76,7 +78,8 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
     <h1 className="sr-only">Trade workspace</h1>
     <div className="terminal-grid">
       <aside className="opportunity-rail" aria-label="Ticker watchlist and scanner">
-        <nav className="rail-tabs" aria-label="Ticker list">{(["scanner", "watchlist"] as const).map((tab) => <button key={tab} type="button" aria-pressed={preferences.rail === tab} className={preferences.rail === tab ? "active" : ""} onClick={() => updatePreferences({ rail: tab })}>{tab === "scanner" ? "Scanner" : "Watchlist"}</button>)}</nav>
+        <nav className="rail-tabs" aria-label="Ticker list">{(["scanner", "watchlist", "sectors"] as const).map((tab) => <button key={tab} type="button" aria-pressed={preferences.rail === tab} className={preferences.rail === tab ? "active" : ""} onClick={() => updatePreferences({ rail: tab })}>{tab === "scanner" ? "Scanner" : tab === "sectors" ? "Sectors" : "Watchlist"}</button>)}</nav>
+        {preferences.rail === "sectors" ? <SectorRail selected={sector} onSelect={(next) => { setSector(next); selectSymbol(next); }} /> : <>
         <div className="rail-controls">
           {preferences.rail === "scanner" ? <label className="rail-filter"><span className="sr-only">Scanner preset</span><select value={presetIndex} onChange={(event) => { const preset = BUILTIN_PRESETS[Number(event.target.value)]; if (preset) setFilters(preset.filters); }}><option value={-1} disabled>Custom filters</option>{BUILTIN_PRESETS.map((item, index) => <option key={item.name} value={index}>{item.name}</option>)}</select></label> : <button type="button" onClick={toggleWatch} aria-pressed={watched}><Star size={13} aria-hidden="true" />{watched ? "Remove " : "Add "}{symbol}</button>}
           <button type="button" className="icon-action" onClick={() => filterDialog.current?.showModal()} aria-label="Open scanner filters"><SlidersHorizontal size={15} aria-hidden="true" /></button>
@@ -97,9 +100,11 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
         </div>
         <p className="rail-note">{shownSymbols.length} names · 15m scanner<br />Scan {new Date(scanner.generated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · refresh 60s</p>
         <details className="rail-policy"><summary>Execution eligibility</summary><p>{scanner.execution_gates?.paper_experiment_enabled ? "Paper experiments eligible." : "Holdout-gated entries."} Filters affect this view only. Worker checks are separate from quote refresh.</p></details>
+        </>}
       </aside>
       <div className="workspace-chart-column">
         <MarketChartTerminal snapshot={snapshot} symbol={symbol} onSymbolChange={selectSymbol} quoteRefreshMs={preferences.quoteSeconds * 1000} compact />
+        {preferences.rail === "sectors" && <SectorDetail selected={sector} onSymbolChange={selectSymbol} />}
         <section className="workspace-thesis compact-thesis" aria-label={symbol + " research thesis"}>
           <div className="thesis-summary">
             <strong>{symbol} · {candidate?.direction ?? "No scanner thesis"}</strong>

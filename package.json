@@ -1,0 +1,15 @@
+{
+  "name": "regimeshift-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RegimeShift AI — Autonomous Multi-Agent Paper Trading Terminal",
+  "scripts": {
+    "dev": "./run.sh",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && .venv/bin/uvicorn regimeshift.main:app --host 127.0.0.1 --port 8000 --reload",
+    "build": "cd frontend && npm run build",
+    "lint": "cd frontend && npm run lint",
+    "test": "cd backend && .venv/bin/pytest",
+    "test:frontend": "cd frontend && npm run test"
+  }
+}

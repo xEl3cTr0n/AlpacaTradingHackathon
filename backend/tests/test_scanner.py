@@ -111,3 +111,51 @@ def test_live_evaluation_time_rejects_previous_session_cross(monkeypatch) -> Non
     assert snapshot.actionable_count == 0
     assert snapshot.candidates[0].signal_tier == "watch"
     assert "evaluation time" in snapshot.candidates[0].evidence[-1]
+
+
+def test_scanner_candidate_lifecycle_and_sector_override():
+    scanner = LargeCapScanner()
+    benchmark = _points([400 + index * 0.5 for index in range(80)], volume=5_000_000)
+    closes = [100 + index * 0.8 for index in range(80)]
+    closes[-2] = 145
+    closes[-1] = 180
+
+    # Test candidate with market aligned -> confirmed lifecycle stage
+    candidate = scanner.score(
+        "AAPL", "Apple", _points(closes, volume=3_000_000), benchmark, 79
+    )
+    assert candidate is not None
+    assert candidate.actionable is True
+    assert candidate.lifecycle_stage == "confirmed"
+    assert candidate.sector_agreement == "agrees"
+    assert candidate.invalidation_price is not None
+    assert candidate.target_price is not None
+    assert candidate.invalidation_price < candidate.current_price < candidate.target_price
+
+    # Test candidate with market opposing (bearish benchmark), but strong stock volume override
+    bearish_benchmark = _points([400 - index * 0.5 for index in range(80)], volume=5_000_000)
+    override_candidate = scanner.score(
+        "AAPL", "Apple", _points(closes, volume=5_000_000), bearish_benchmark, 79
+    )
+    assert override_candidate is not None
+    assert override_candidate.sector_agreement == "disagrees"
+    assert override_candidate.sector_disagreement_override is True
+    assert override_candidate.lifecycle_stage == "confirmed"
+    assert any("Sector disagreement override" in item for item in override_candidate.evidence)
+
+
+def test_trend_continuation_qualifies_for_exploration() -> None:
+    scanner = LargeCapScanner()
+    benchmark = _points([400 + index * 0.5 for index in range(80)], volume=5_000_000)
+    # Steady uptrend with breakout at end
+    closes = [100 + index * 1.0 for index in range(80)]
+    closes[-1] = closes[-2] + 2.0  # 20-bar breakout above prior highs
+
+    candidate = scanner.score(
+        "AAPL", "Apple", _points(closes, volume=3_000_000), benchmark, 79
+    )
+    assert candidate is not None
+    assert candidate.pattern == ScannerPattern.BULLISH_TREND_CONTINUATION
+    assert candidate.actionable is True
+    assert candidate.signal_tier in {"exploration", "production"}
+

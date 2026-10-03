@@ -2,18 +2,22 @@ export const WORKSPACE_KEY = "regimeshift.workspace.v1";
 export interface WorkspacePreferences {
   symbol: string;
   timeframe: "1Min" | "5Min" | "15Min" | "1Day";
+  candleLimit: 100 | 300 | 500 | 1000;
   rsiMode: "off" | "raw" | "quiet" | "reversal";
   lowVolFilter: boolean;
   showLevels: boolean;
   showGex: boolean;
-  rail: "scanner" | "watchlist";
+  showIchimoku: boolean;
+  showTargets: boolean;
+  rail: "scanner" | "watchlist" | "sectors";
   dock: "positions" | "orders" | "options";
   quoteSeconds: 0 | 1 | 5 | 10;
   watchlist: string[];
 }
 export const DEFAULT_WORKSPACE: WorkspacePreferences = {
-  symbol: "SPY", timeframe: "5Min", rsiMode: "quiet", lowVolFilter: false,
-  showLevels: true, showGex: true, rail: "scanner", dock: "positions", quoteSeconds: 5,
+  symbol: "SPY", timeframe: "5Min", candleLimit: 500, rsiMode: "quiet", lowVolFilter: false,
+  showLevels: true, showGex: true, showIchimoku: false, showTargets: true,
+  rail: "scanner", dock: "positions", quoteSeconds: 5,
   watchlist: ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA"],
 };
 export function normalizeTicker(value: unknown): string | null {
@@ -33,11 +37,14 @@ export function parseWorkspace(raw: string | null): WorkspacePreferences {
   return {
     symbol: normalizeTicker(input.symbol) ?? DEFAULT_WORKSPACE.symbol,
     timeframe: pick("timeframe", ["1Min", "5Min", "15Min", "1Day"], DEFAULT_WORKSPACE.timeframe),
+    candleLimit: pick("candleLimit", [100, 300, 500, 1000], DEFAULT_WORKSPACE.candleLimit),
     rsiMode: pick("rsiMode", ["off", "raw", "quiet", "reversal"], DEFAULT_WORKSPACE.rsiMode),
     lowVolFilter: typeof input.lowVolFilter === "boolean" ? input.lowVolFilter : false,
     showLevels: typeof input.showLevels === "boolean" ? input.showLevels : true,
     showGex: typeof input.showGex === "boolean" ? input.showGex : true,
-    rail: pick("rail", ["scanner", "watchlist"], "scanner"),
+    showIchimoku: typeof input.showIchimoku === "boolean" ? input.showIchimoku : false,
+    showTargets: typeof input.showTargets === "boolean" ? input.showTargets : true,
+    rail: pick("rail", ["scanner", "watchlist", "sectors"], "scanner"),
     dock: pick("dock", ["positions", "orders", "options"], "positions"),
     quoteSeconds: pick("quoteSeconds", [0, 1, 5, 10], 5),
     watchlist: Array.isArray(input.watchlist)

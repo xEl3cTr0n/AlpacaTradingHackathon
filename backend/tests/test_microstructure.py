@@ -85,3 +85,41 @@ def test_nguyen_profile_exposes_directional_strike_levels() -> None:
     assert result.call_directional_bias == 105
     assert result.key_gamma_strike == 105
     assert result.hedge_wall == 95
+
+
+def test_strike_liquidity_and_iv_matrix_populated() -> None:
+    rows = [
+        {
+            "option_type": "call",
+            "strike": 100,
+            "gamma": 0.05,
+            "open_interest": 200,
+            "delta": 0.5,
+            "vega": 0.2,
+            "volume": 50,
+            "implied_volatility": 0.25,
+        },
+        {
+            "option_type": "put",
+            "strike": 100,
+            "gamma": 0.05,
+            "open_interest": 300,
+            "delta": -0.5,
+            "vega": 0.2,
+            "volume": 80,
+            "implied_volatility": 0.27,
+        },
+    ] * 12
+    result = assess_microstructure("TEST", 100, rows, source="fixture")
+    assert len(result.gex_by_strike) == 1
+    strike_row = result.gex_by_strike[0]
+    assert strike_row.strike == 100
+    assert strike_row.call_oi == 200 * 12
+    assert strike_row.put_oi == 300 * 12
+    assert strike_row.total_oi == 500 * 12
+    assert strike_row.call_volume == 50 * 12
+    assert strike_row.put_volume == 80 * 12
+    assert strike_row.total_volume == 130 * 12
+    assert strike_row.call_iv == 0.25
+    assert strike_row.put_iv == 0.27
+    assert strike_row.average_iv == 0.26

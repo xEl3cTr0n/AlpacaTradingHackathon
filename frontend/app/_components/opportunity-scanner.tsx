@@ -3,6 +3,7 @@
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Bell,
   CheckCircle2,
   ChartNoAxesCombined,
   Crosshair,
@@ -12,8 +13,12 @@ import {
   ShieldAlert,
   Target,
   TriangleAlert,
+  Volume2,
+  VolumeX,
+  X,
+  Zap,
 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { CSSProperties } from "react";
 import { loadOptionsThesis, refreshScanner, runScannerAnalysis } from "@/app/actions";
 import { ScannerDiagnosticsPanel, ScannerFilterBar } from "./scanner-workbench";
@@ -38,6 +43,35 @@ function tradeLabel(candidate: ScannerCandidate, actionable: boolean): string {
   return actionable ? `Run ${side} council` : `${side} watch`;
 }
 
+function playChime() {
+  try {
+    if (typeof window === "undefined") return;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.15);
+
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.3);
+  } catch {
+    // Autoplay restrictions
+  }
+}
+
 export function OpportunityScanner({
   initialScanner,
   onSnapshot,
@@ -56,8 +90,48 @@ export function OpportunityScanner({
   const [activeSymbol, setActiveSymbol] = useState("");
   const [optionsThesis, setOptionsThesis] = useState<OptionsThesisSnapshot | null>(null);
   const [optionsError, setOptionsError] = useState("");
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [alertToast, setAlertToast] = useState<{
+    symbol: string;
+    direction: string;
+    conviction: number;
+    pattern: string;
+    override?: boolean;
+    stage?: string;
+  } | null>(null);
+  const seenAlerts = useRef<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [isOptionsPending, startOptionsTransition] = useTransition();
+
+  useEffect(() => {
+    const confirmed = scanner.candidates.filter(
+      (c) => c.lifecycle_stage === "confirmed" && c.actionable
+    );
+    for (const c of confirmed) {
+      const id = `${c.symbol}-${c.as_of}`;
+      if (!seenAlerts.current.has(id)) {
+        seenAlerts.current.add(id);
+        if (soundEnabled) {
+          playChime();
+        }
+        const showTimer = setTimeout(() => {
+          setAlertToast({
+            symbol: c.symbol,
+            direction: c.direction,
+            conviction: c.conviction,
+            pattern: c.pattern,
+            override: c.sector_disagreement_override,
+            stage: c.lifecycle_stage,
+          });
+        }, 0);
+        const hideTimer = setTimeout(() => setAlertToast(null), 8000);
+        return () => {
+          clearTimeout(showTimer);
+          clearTimeout(hideTimer);
+        };
+      }
+    }
+  }, [scanner, soundEnabled]);
 
   function rescan() {
     setError("");
@@ -121,11 +195,58 @@ export function OpportunityScanner({
           <h1>Large-cap options scanner</h1>
           <p>Ranks liquid names every {scanner.interval_minutes} minutes; no signal is a valid result.</p>
         </div>
-        <button className="primary-action" type="button" onClick={rescan} disabled={isPending}>
-          <RefreshCw size={16} className={isPending && !activeSymbol ? "spinning" : ""} aria-hidden="true" />
-          {isPending && !activeSymbol ? "Scanning…" : "Run scan"}
-        </button>
+        <div className="view-actions">
+          <button
+            className={`secondary-action sound-toggle ${soundEnabled ? "active" : ""}`}
+            type="button"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? "Mute audio chimes" : "Enable audio chimes"}
+            aria-label={soundEnabled ? "Mute audio chimes" : "Enable audio chimes"}
+          >
+            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            <span>Sound {soundEnabled ? "ON" : "OFF"}</span>
+          </button>
+          <button className="primary-action" type="button" onClick={rescan} disabled={isPending}>
+            <RefreshCw size={16} className={isPending && !activeSymbol ? "spinning" : ""} aria-hidden="true" />
+            {isPending && !activeSymbol ? "Scanning…" : "Run scan"}
+          </button>
+        </div>
       </header>
+
+      {alertToast && (
+        <aside className="scanner-alert-toast" role="alert" aria-live="assertive">
+          <div className="alert-toast-content">
+            <Bell size={18} className="alert-bell-icon" />
+            <div>
+              <strong>Confirmed opportunity: {alertToast.symbol}</strong>
+              <p>
+                {alertToast.direction} {patternLabel(alertToast.pattern as ScannerCandidate["pattern"])} · {Math.round(alertToast.conviction * 100)}% conviction
+                {alertToast.override ? " · ⚡ Sector override" : " · ✓ Sector confirmed"}
+              </p>
+            </div>
+          </div>
+          <div className="alert-toast-actions">
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => {
+                setSelectedSymbol(alertToast.symbol);
+                setAlertToast(null);
+              }}
+            >
+              Inspect
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setAlertToast(null)}
+              aria-label="Dismiss alert"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </aside>
+      )}
 
       <section className="scanner-kpis" aria-label="Scanner summary">
         <article><Search size={18} aria-hidden="true" /><div><span>Universe</span><strong>{scanner.scanned_count}/{scanner.universe_size}</strong><small>large-cap names scanned</small></div></article>
@@ -148,8 +269,37 @@ export function OpportunityScanner({
                   {lead.direction === "bullish" ? <ArrowUpRight size={15} /> : lead.direction === "bearish" ? <ArrowDownRight size={15} /> : null}
                   {patternLabel(lead.pattern)}
                 </b>
+                <b className={`stage-chip ${lead.lifecycle_stage ?? "watch"}`}>
+                  {lead.lifecycle_stage === "confirmed" ? (
+                    <><CheckCircle2 size={12} /> CONFIRMED</>
+                  ) : lead.lifecycle_stage === "heads_up" ? (
+                    <><Zap size={12} /> HEADS-UP</>
+                  ) : (
+                    "WATCH"
+                  )}
+                </b>
+                <b className={`agreement-chip ${lead.sector_disagreement_override ? "override" : lead.sector_agreement ?? "neutral"}`}>
+                  {lead.sector_disagreement_override
+                    ? "⚡ Sector override"
+                    : lead.sector_agreement === "agrees"
+                    ? "✓ Sector aligned"
+                    : lead.sector_agreement === "disagrees"
+                    ? "⚠ Sector opposes"
+                    : "Sector neutral"}
+                </b>
                 <b>{lead.signal_tier} · ${lead.risk_cap_dollars.toFixed(0)} max</b>
               </div>
+              {lead.invalidation_price != null && lead.target_price != null && (
+                <div className="scanner-lead-levels">
+                  <span>Invalidation: <strong className="negative">${lead.invalidation_price.toFixed(2)}</strong></span>
+                  <span>Target: <strong className="positive">${lead.target_price.toFixed(2)}</strong></span>
+                </div>
+              )}
+              {lead.rejection_reasons && lead.rejection_reasons.length > 0 && (
+                <div className="scanner-rejection-notes">
+                  <small>Pending gates: {lead.rejection_reasons.join(" · ")}</small>
+                </div>
+              )}
               <p>{lead.evidence.slice(0, 3).join(" · ")}</p>
             </div>
             <div className="conviction-orbit" aria-label={`${Math.round(lead.conviction * 100)} percent conviction`} style={{ "--conviction": `${Math.round(lead.conviction * 360)}deg` } as CSSProperties}>
@@ -257,7 +407,15 @@ export function OpportunityScanner({
               {visible.map((candidate) => (
                 <tr key={candidate.symbol} className={`${candidate.actionable ? "actionable-row" : ""} ${candidate.symbol === lead?.symbol ? "selected-row" : ""}`.trim()}>
                   <td><span className="scanner-rank">{candidate.rank.toString().padStart(2, "0")}</span></td>
-                  <td><strong>{candidate.symbol}</strong><small>{patternLabel(candidate.pattern)} · {candidate.signal_tier}</small></td>
+                  <td>
+                    <strong>{candidate.symbol}</strong>
+                    <div className="table-symbol-meta">
+                      <small>{patternLabel(candidate.pattern)} · {candidate.signal_tier}</small>
+                      <span className={`stage-tag ${candidate.lifecycle_stage ?? "watch"}`}>
+                        {candidate.lifecycle_stage === "confirmed" ? "CONFIRMED" : candidate.lifecycle_stage === "heads_up" ? "HEADS-UP" : "WATCH"}
+                      </span>
+                    </div>
+                  </td>
                   <td><strong>${candidate.current_price.toFixed(2)}</strong><small>EMA ${candidate.ema_18.toFixed(2)}</small></td>
                   <td><strong>{candidate.diagnostics?.chop.value?.toFixed(1) ?? "—"} · {candidate.diagnostics?.chop.state ?? "unavailable"}</strong><small>R {candidate.diagnostics?.daily_r_factor?.score.toFixed(1) ?? "—"} · completed DAY</small></td>
                   <td><strong>±${candidate.move_thesis.expected_move_dollars.toFixed(2)}</strong><small>{candidate.move_thesis.lower_bound.toFixed(2)}–{candidate.move_thesis.upper_bound.toFixed(2)}</small></td>

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from regimeshift.domain.gamma_profile import calculate_gamma_profile_levels
 from regimeshift.domain.models import (
@@ -54,27 +55,49 @@ def assess_microstructure(
     net_gex = gross_gex = total_gamma_oi = atm_gamma_oi = 0.0
     call_delta_volume = put_delta_volume = total_volume = 0.0
     put_vega_volume = total_vega_volume = 0.0
-    profile: dict[float, dict[str, float]] = {}
+    profile: dict[float, dict[str, Any]] = {}
 
     for item in usable:
         option_type = str(item["option_type"]).lower()
         strike = float(item["strike"])
         gamma = max(0.0, float(item["gamma"]))
-        oi = float(item["open_interest"] or 0)
-        volume = max(0.0, float(item.get("volume") or 0))
+        oi = int(float(item.get("open_interest") or 0))
+        volume = int(max(0.0, float(item.get("volume") or 0)))
         delta = abs(float(item.get("delta") or 0))
         vega = abs(float(item.get("vega") or 0))
+        iv = float(item["implied_volatility"]) if item.get("implied_volatility") is not None else None
         unsigned = gamma * oi * 100 * spot
         signed = unsigned if option_type == "call" else -unsigned
-        row = profile.setdefault(strike, {"call_gex": 0.0, "put_gex": 0.0})
-        row["call_gex" if option_type == "call" else "put_gex"] += signed
-        net_gex += signed
-        gross_gex += unsigned
+        row = profile.setdefault(
+            strike,
+            {
+                "call_gex": 0.0,
+                "put_gex": 0.0,
+                "call_oi": 0,
+                "put_oi": 0,
+                "call_volume": 0,
+                "put_volume": 0,
+                "call_iv": None,
+                "put_iv": None,
+            },
+        )
         if option_type == "call":
+            row["call_gex"] += signed
+            row["call_oi"] += oi
+            row["call_volume"] += volume
+            if iv is not None:
+                row["call_iv"] = iv
             call_delta_volume += delta * volume
         else:
+            row["put_gex"] += signed
+            row["put_oi"] += oi
+            row["put_volume"] += volume
+            if iv is not None:
+                row["put_iv"] = iv
             put_delta_volume += delta * volume
             put_vega_volume += vega * volume
+        net_gex += signed
+        gross_gex += unsigned
         total_volume += volume
         total_vega_volume += vega * volume
         total_gamma_oi += gamma * oi
@@ -96,6 +119,13 @@ def assess_microstructure(
         gamma_regime = GammaRegime.AMPLIFYING
     else:
         gamma_regime = GammaRegime.MIXED
+
+    atm_ivs = [
+        float(item["implied_volatility"])
+        for item in usable
+        if item.get("implied_volatility") and 0.97 <= float(item["strike"]) / spot <= 1.03
+    ]
+    average_iv = sum(atm_ivs) / len(atm_ivs) if atm_ivs else None
 
     completeness = len(usable) / max(1, len(contracts))
     breadth = min(1.0, len(usable) / 100)
@@ -124,6 +154,7 @@ def assess_microstructure(
         key_delta_strike=levels.key_delta_strike,
         hedge_wall=levels.hedge_wall,
         gamma_regime=gamma_regime,
+        average_iv=round(average_iv, 4) if average_iv is not None else None,
         data_quality=round(data_quality, 3),
         gex_by_strike=[
             {
@@ -131,6 +162,17 @@ def assess_microstructure(
                 "call_gex": round(row["call_gex"], 2),
                 "put_gex": round(row["put_gex"], 2),
                 "net_gex": round(row["call_gex"] + row["put_gex"], 2),
+                "call_oi": row["call_oi"],
+                "put_oi": row["put_oi"],
+                "total_oi": row["call_oi"] + row["put_oi"],
+                "call_volume": row["call_volume"],
+                "put_volume": row["put_volume"],
+                "total_volume": row["call_volume"] + row["put_volume"],
+                "call_iv": round(row["call_iv"], 4) if row["call_iv"] is not None else None,
+                "put_iv": round(row["put_iv"], 4) if row["put_iv"] is not None else None,
+                "average_iv": round((row["call_iv"] + row["put_iv"]) / 2, 4)
+                if row["call_iv"] is not None and row["put_iv"] is not None
+                else (round(row["call_iv"], 4) if row["call_iv"] is not None else (round(row["put_iv"], 4) if row["put_iv"] is not None else None)),
             }
             for strike, row in sorted(profile.items())
         ],

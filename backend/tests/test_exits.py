@@ -122,3 +122,34 @@ def test_ambiguous_opening_intents_and_ratios_do_not_default_to_buy_to_close(fie
 def test_partial_spread_requires_explicit_reconciliation():
     with pytest.raises(ValueError, match="Incomplete held spread"):
         managed_exit_plan(_entry(), {"AAPL261218C00200000": {}})
+
+
+def test_short_dated_spread_entered_today_is_not_closed_immediately():
+    entry = _entry()
+    entry["submitted_at"] = "2026-12-11T14:30:00Z"
+    positions = {
+        "AAPL261218C00200000": {"qty": "1", "qty_available": "1", "unrealized_pl": "0"},
+        "AAPL261218C00205000": {"qty": "-1", "qty_available": "1", "unrealized_pl": "0"},
+    }
+    # 7 DTE on entry day: zero P&L must NOT trigger an immediate exit
+    plan = managed_exit_plan(entry, positions, now=datetime(2026, 12, 11, 15, tzinfo=UTC))
+    assert plan is None
+
+    # On day 6 (1 DTE remaining), expiration cutoff triggers
+    plan_expiry = managed_exit_plan(entry, positions, now=datetime(2026, 12, 17, 15, tzinfo=UTC))
+    assert plan_expiry is not None
+    assert "expiration is within 1 day" in plan_expiry["reasons"]
+
+
+def test_swing_spread_entered_earlier_exits_at_seven_dte():
+    entry = _entry()
+    entry["submitted_at"] = "2026-11-18T14:30:00Z"  # Entered 30 days prior
+    positions = {
+        "AAPL261218C00200000": {"qty": "1", "qty_available": "1", "unrealized_pl": "0"},
+        "AAPL261218C00205000": {"qty": "-1", "qty_available": "1", "unrealized_pl": "0"},
+    }
+    # Reaching 7 DTE on a swing spread exits to avoid gamma/assignment risk
+    plan = managed_exit_plan(entry, positions, now=datetime(2026, 12, 11, 15, tzinfo=UTC))
+    assert plan is not None
+    assert "expiration is within 7 days" in plan["reasons"]
+

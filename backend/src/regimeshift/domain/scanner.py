@@ -271,21 +271,37 @@ class LargeCapScanner:
                 and daily_benchmark_50[-1] < daily_benchmark_50[-6]
             )
 
+        bullish_pullback = (
+            closes[-1] > ema_18[-1]
+            and abs(closes[-1] - ema_18[-1]) / ema_18[-1] <= 0.005
+        )
+        bullish_breakout = len(closes) >= 20 and closes[-1] >= max(closes[-20:-1])
+        bearish_pullback = (
+            closes[-1] < ema_18[-1]
+            and abs(closes[-1] - ema_18[-1]) / ema_18[-1] <= 0.005
+        )
+        bearish_breakdown = len(closes) >= 20 and closes[-1] <= min(closes[-20:-1])
+
+        trend_continuation = False
         if bullish_trend:
             direction = Direction.BULLISH
-            pattern = (
-                ScannerPattern.BULLISH_18EMA_CROSS
-                if bullish_cross
-                else ScannerPattern.BULLISH_TREND_WATCH
-            )
+            if bullish_cross:
+                pattern = ScannerPattern.BULLISH_18EMA_CROSS
+            elif (bullish_pullback or bullish_breakout) and not bearish_cross:
+                pattern = ScannerPattern.BULLISH_TREND_CONTINUATION
+                trend_continuation = True
+            else:
+                pattern = ScannerPattern.BULLISH_TREND_WATCH
             market_aligned = benchmark_bullish
         elif bearish_trend:
             direction = Direction.BEARISH
-            pattern = (
-                ScannerPattern.BEARISH_18EMA_CROSS
-                if bearish_cross
-                else ScannerPattern.BEARISH_TREND_WATCH
-            )
+            if bearish_cross:
+                pattern = ScannerPattern.BEARISH_18EMA_CROSS
+            elif (bearish_pullback or bearish_breakdown) and not bullish_cross:
+                pattern = ScannerPattern.BEARISH_TREND_CONTINUATION
+                trend_continuation = True
+            else:
+                pattern = ScannerPattern.BEARISH_TREND_WATCH
             market_aligned = benchmark_bearish
         else:
             direction = Direction.SIDEWAYS
@@ -313,9 +329,6 @@ class LargeCapScanner:
             for position in range(len(closes) - 20, len(closes))
         ]
         realized_volatility = pstdev(daily_returns) * math.sqrt(annualization_periods)
-        # A cross is actionable only when it agrees with the higher-timeframe
-        # trend.  The old unqualified OR could mark a bearish cross inside a
-        # bullish trend (or vice versa) as an actionable signal.
         exact_cross = (direction == Direction.BULLISH and bullish_cross) or (
             direction == Direction.BEARISH and bearish_cross
         )
@@ -325,7 +338,7 @@ class LargeCapScanner:
         volume_score = max(0.0, min(1.0, (volume_ratio - 0.8) / 0.8))
         rsi_score = max(0.0, min(1.0, (rsi_14[-1] - 50) * direction_sign / 20))
         conviction = (
-            (0.45 if exact_cross else 0.15)
+            (0.45 if exact_cross else 0.35 if trend_continuation else 0.15)
             + 0.20 * slope_score
             + 0.15 * relative_strength_score
             + 0.10 * volume_score
@@ -334,7 +347,7 @@ class LargeCapScanner:
         conviction = round(min(1.0, conviction), 4)
         liquidity_qualified = average_dollar_volume >= self.minimum_average_dollar_volume
         qualified_signal = bool(
-            exact_cross
+            (exact_cross or trend_continuation)
             and direction != Direction.SIDEWAYS
             and liquidity_qualified
             and conviction >= self.exploration_conviction
@@ -398,6 +411,75 @@ class LargeCapScanner:
                 f"({conviction:.1%}; requires {self.exploration_conviction:.1%})"
             ),
         ]
+        # Invalidation and target price levels:
+        if direction == Direction.BULLISH:
+            local_lows = [p.low for p in points[max(0, index - 5) : index + 1]]
+            invalidation_price = round(min(local_lows), 2) if local_lows else round(current.close * 0.98, 2)
+            risk = max(current.close - invalidation_price, current.close * 0.01)
+            target_price = round(current.close + 2 * risk, 2)
+        elif direction == Direction.BEARISH:
+            local_highs = [p.high for p in points[max(0, index - 5) : index + 1]]
+            invalidation_price = round(max(local_highs), 2) if local_highs else round(current.close * 1.02, 2)
+            risk = max(invalidation_price - current.close, current.close * 0.01)
+            target_price = round(current.close - 2 * risk, 2)
+        else:
+            invalidation_price = None
+            target_price = None
+
+        # Sector / broad-market agreement & override:
+        sector_disagreement_override = False
+        if market_aligned:
+            sector_agreement = "agrees"
+        elif direction in (Direction.BULLISH, Direction.BEARISH):
+            sector_agreement = "disagrees"
+            if volume_ratio >= 1.4 and conviction >= 0.58:
+                sector_disagreement_override = True
+        else:
+            sector_agreement = "neutral"
+
+        rejection_reasons: list[str] = []
+        if not liquidity_qualified:
+            rejection_reasons.append(
+                f"Average daily dollar volume (${average_dollar_volume:,.0f}) is below ${self.minimum_average_dollar_volume:,.0f} threshold"
+            )
+        if direction == Direction.SIDEWAYS:
+            rejection_reasons.append("Trend is sideways; no directional setup")
+        elif not exact_cross:
+            rejection_reasons.append("No fresh 18 EMA crossover on the evaluated bar")
+        if conviction < self.exploration_conviction:
+            rejection_reasons.append(
+                f"Conviction ({conviction:.1%}) is below {self.exploration_conviction:.1%} exploration threshold"
+            )
+        if sector_agreement == "disagrees" and not sector_disagreement_override:
+            rejection_reasons.append(
+                "Sector/market trend disagrees and stock volume ratio is insufficient for override"
+            )
+
+        if actionable and (market_aligned or sector_disagreement_override):
+            lifecycle_stage = "confirmed"
+            confirmation_time = current.timestamp
+        elif actionable or (exact_cross and direction in (Direction.BULLISH, Direction.BEARISH)):
+            lifecycle_stage = "heads_up"
+            confirmation_time = None
+        else:
+            lifecycle_stage = "watch"
+            confirmation_time = None
+
+        evidence_items = [
+            f"Price {current.close:.2f} vs EMA(18) {ema_18[-1]:.2f}",
+            f"EMA(18) five-session slope {slope:+.2%}",
+            f"20-session relative strength vs SPY {relative_strength:+.2%}",
+            f"Volume is {volume_ratio:.2f}x its 20-session average",
+            "Option-chain liquidity is verified only after council approval",
+            *entry_checks,
+        ]
+        if sector_disagreement_override:
+            evidence_items.append(
+                "Sector disagreement override: high volume and conviction allow stock-specific execution"
+            )
+        elif sector_agreement == "disagrees":
+            evidence_items.append("Sector disagreement: caution advised, stock opposes broad market trend")
+
         return ScannerCandidate(
             rank=1,
             symbol=symbol,
@@ -422,12 +504,12 @@ class LargeCapScanner:
             market_aligned=market_aligned,
             liquidity_tier=liquidity_tier,
             move_thesis=move_thesis,
-            evidence=[
-                f"Price {current.close:.2f} vs EMA(18) {ema_18[-1]:.2f}",
-                f"EMA(18) five-session slope {slope:+.2%}",
-                f"20-session relative strength vs SPY {relative_strength:+.2%}",
-                f"Volume is {volume_ratio:.2f}x its 20-session average",
-                "Option-chain liquidity is verified only after council approval",
-                *entry_checks,
-            ],
+            evidence=evidence_items,
+            lifecycle_stage=lifecycle_stage,
+            confirmation_time=confirmation_time,
+            sector_agreement=sector_agreement,
+            sector_disagreement_override=sector_disagreement_override,
+            invalidation_price=invalidation_price,
+            target_price=target_price,
+            rejection_reasons=rejection_reasons,
         )

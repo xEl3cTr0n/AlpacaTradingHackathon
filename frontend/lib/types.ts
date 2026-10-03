@@ -10,6 +10,8 @@ export type VoteChoice = "support" | "oppose" | "abstain";
 export type ScannerPattern =
   | "bullish_18ema_cross"
   | "bearish_18ema_cross"
+  | "bullish_trend_continuation"
+  | "bearish_trend_continuation"
   | "bullish_trend_watch"
   | "bearish_trend_watch"
   | "no_setup";
@@ -38,6 +40,22 @@ export interface AgentVerdict {
   confidence: number;
   summary: string;
   evidence: string[];
+}
+
+export interface GexStrikeRow {
+  strike: number;
+  call_gex: number;
+  put_gex: number;
+  net_gex: number;
+  call_oi?: number;
+  put_oi?: number;
+  total_oi?: number;
+  call_volume?: number;
+  put_volume?: number;
+  total_volume?: number;
+  call_iv?: number | null;
+  put_iv?: number | null;
+  average_iv?: number | null;
 }
 
 export interface DecisionSnapshot {
@@ -106,7 +124,8 @@ export interface DecisionSnapshot {
     contract_count: number;
     net_gex: number;
     gross_gex: number;
-    gex_by_strike?: Array<{ strike: number; call_gex: number; put_gex: number; net_gex: number }>;
+    average_iv?: number | null;
+    gex_by_strike?: GexStrikeRow[];
     gamma_concentration?: number | null;
     nope_options?: number | null;
     put_vega_intensity?: number | null;
@@ -254,6 +273,29 @@ export interface ManualTradeResult {
   client_order_id: string;
 }
 
+export type UnderlyingTradePlan = ScannerDiagnostics["plans"][number];
+export interface SectorMember {
+  symbol: string; as_of: string | null; available: boolean; price: number | null;
+  session_return: number | null; relative_to_sector: number | null;
+  trend: "bullish" | "bearish" | "mixed" | "unavailable";
+  above_vwap: boolean | null; correlation: number | null; correlation_pairs: number;
+  confirms: boolean; plans: UnderlyingTradePlan[];
+}
+export interface SectorScanRow {
+  symbol: string; name: string; as_of: string | null; available: boolean; stale: boolean;
+  price: number | null; session_return: number | null; relative_to_spy: number | null;
+  trend: SectorMember["trend"]; session_vwap: number | null; chop: number | null;
+  sample_coverage: number; bullish_breadth: number | null; bearish_breadth: number | null;
+  agreement: number | null; score: number | null;
+  signal: "confirmed_bullish" | "confirmed_bearish" | "watch" | "historical" | "unavailable";
+  daily_returns: Record<string, number | null>; daily_as_of: string | null; plans: UnderlyingTradePlan[];
+  members: SectorMember[]; reasons: string[];
+}
+export interface SectorScanSnapshot {
+  generated_at: string; as_of: string | null; source: string; read_only: true;
+  timeframe: "15Min"; sectors: SectorScanRow[]; notes: string[];
+}
+
 export interface LiveMarketTick {
   symbol: string;
   as_of: string;
@@ -274,6 +316,44 @@ export interface ChartSnapshot {
   volume_rsi_signals?: VolumeRsiReading[];
 }
 
+export interface IvLevels {
+  upper_1s?: number | null;
+  lower_1s?: number | null;
+  upper_2s?: number | null;
+  lower_2s?: number | null;
+  average_iv?: number | null;
+  expected_move?: number | null;
+  session_expected_move?: number | null;
+  session_upper?: number | null;
+  session_lower?: number | null;
+  prior_day_high?: number | null;
+  prior_day_low?: number | null;
+  prior_day_close?: number | null;
+}
+
+export interface VolumeProfileLevels {
+  poc?: number | null;
+  vah?: number | null;
+  val?: number | null;
+}
+
+export interface IchimokuCloudPoint {
+  timestamp: string;
+  tenkan_sen?: number | null;
+  kijun_sen?: number | null;
+  senkou_span_a?: number | null;
+  senkou_span_b?: number | null;
+  chikou_span?: number | null;
+}
+
+export interface StructuralLevels {
+  kijun_sen?: number | null;
+  tenkan_sen?: number | null;
+  senkou_span_b?: number | null;
+  session_vwap?: number | null;
+  ichimoku_series?: IchimokuCloudPoint[];
+}
+
 export interface ChartContextSnapshot {
   symbol: string;
   generated_at: string;
@@ -284,6 +364,9 @@ export interface ChartContextSnapshot {
   swing_as_of: string | null;
   swing: DecisionSnapshot["swing"] | null;
   options_microstructure: DecisionSnapshot["options_microstructure"] | null;
+  iv_levels?: IvLevels | null;
+  volume_profile?: VolumeProfileLevels | null;
+  structural_levels?: StructuralLevels | null;
   notes: string[];
 }
 
@@ -468,6 +551,13 @@ export interface ScannerCandidate {
     conflicting_evidence: string[];
   };
   evidence: string[];
+  lifecycle_stage?: "heads_up" | "confirmed" | "watch" | "invalidated";
+  confirmation_time?: string | null;
+  sector_agreement?: "agrees" | "disagrees" | "neutral";
+  sector_disagreement_override?: boolean;
+  invalidation_price?: number | null;
+  target_price?: number | null;
+  rejection_reasons?: string[];
 }
 
 export interface ScannerSnapshot {
