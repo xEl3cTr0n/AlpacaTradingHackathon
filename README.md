@@ -69,9 +69,12 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). API documentation is at
 [http://localhost:8000/docs](http://localhost:8000/docs).
 
-On Windows, create the virtualenv with `py -3.11 -m venv .venv` and
-`.\.venv\Scripts\pip install -e ".[dev]"`, run `npm install` in `frontend`,
-then start both servers from the repository root in PowerShell:
+On Windows, install Python and Node once with
+`winget install -e --id Python.Python.3.12` and
+`winget install -e --id OpenJS.NodeJS.LTS`, then open a new PowerShell window.
+Create the virtualenv with `py -3.12 -m venv .venv` and
+`.\.venv\Scripts\python -m pip install -e ".[dev]"`, run `npm.cmd install`
+in `frontend`, then start both servers from the repository root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run.ps1         # Alpaca keys from .env

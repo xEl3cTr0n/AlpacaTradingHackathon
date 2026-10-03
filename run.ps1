@@ -13,14 +13,20 @@ $Backend = Join-Path $Root "backend"
 $Frontend = Join-Path $Root "frontend"
 $Uvicorn = Join-Path $Backend ".venv\Scripts\uvicorn.exe"
 
+if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
+    Write-Host "Node.js (npm) not found. Install it, then open a NEW PowerShell window:" -ForegroundColor Red
+    Write-Host "  winget install -e --id OpenJS.NodeJS.LTS"
+    exit 1
+}
 if (-not (Test-Path $Uvicorn)) {
-    Write-Host "Backend virtualenv not found. Create it once:" -ForegroundColor Red
-    Write-Host "  cd backend; py -3.11 -m venv .venv; .\.venv\Scripts\pip install -e '.[dev]'"
+    Write-Host "Backend virtualenv not found. Create it once (Python 3.11+):" -ForegroundColor Red
+    Write-Host "  winget install -e --id Python.Python.3.12   # if Python is not installed"
+    Write-Host "  cd backend; py -3.12 -m venv .venv; .\.venv\Scripts\python -m pip install -e '.[dev]'"
     exit 1
 }
 if (-not (Test-Path (Join-Path $Frontend "node_modules"))) {
     Write-Host "Frontend dependencies not found. Install them once:" -ForegroundColor Red
-    Write-Host "  cd frontend; npm install"
+    Write-Host "  cd frontend; npm.cmd install"
     exit 1
 }
 
@@ -51,7 +57,8 @@ Write-Host ""
 
 try {
     Push-Location $Frontend
-    npm run dev
+    # npm.cmd sidesteps the npm.ps1 shim that execution policy often blocks.
+    npm.cmd run dev
 }
 finally {
     # Windows PowerShell 5.1 turns redirected native stderr into errors under
