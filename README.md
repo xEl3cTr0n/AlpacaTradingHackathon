@@ -69,6 +69,15 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). API documentation is at
 [http://localhost:8000/docs](http://localhost:8000/docs).
 
+On Windows, create the virtualenv with `py -3.11 -m venv .venv` and
+`.\.venv\Scripts\pip install -e ".[dev]"`, run `npm install` in `frontend`,
+then start both servers from the repository root in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1         # Alpaca keys from .env
+powershell -ExecutionPolicy Bypass -File .\run.ps1 -Demo   # no keys: labelled demo data
+```
+
 If a dev server was running while `npm run build` rewrote `.next`, stop it with
 `Ctrl+C` and restart `npm run dev`; a stale Next process may otherwise hang.
 

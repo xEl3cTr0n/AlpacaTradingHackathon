@@ -5,6 +5,7 @@
   "description": "RegimeShift AI — Autonomous Multi-Agent Paper Trading Terminal",
   "scripts": {
     "dev": "./run.sh",
+    "dev:win": "powershell -ExecutionPolicy Bypass -File ./run.ps1",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && .venv/bin/uvicorn regimeshift.main:app --host 127.0.0.1 --port 8000 --reload",
     "build": "cd frontend && npm run build",
