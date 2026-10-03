@@ -1,7 +1,7 @@
 # Claude Handoff — RegimeShift AI Terminal
 
-**Handoff Date**: October 2, 2026  
-**Latest Pushed Commit**: [`222600a`](https://github.com/xEl3cTr0n/AlpacaTradingHackathon/commit/222600a) on `main`  
+**Handoff Date**: October 2, 2026 (updated October 3, 2026, see section 6)  
+**Latest Pushed Commit**: [`222600a`](https://github.com/xEl3cTr0n/AlpacaTradingHackathon/commit/222600a) on `main`; chart/news work on `claude/eloquent-planck-rf4dd4`  
 **Live Vercel Preview**: https://regimeshift-ai.vercel.app  
 **Product Invariants**:
 - Paper trading only (`ALPACA_PAPER=true`). Never point to live trading endpoints.
@@ -121,3 +121,27 @@ cd frontend && npm test
 1. **Python Path**: Always run backend commands using `backend/.venv/bin/python` or `backend/.venv/bin/pytest` (system python lacks dependencies).
 2. **Workspace Preferences**: If adding fields to `WorkspacePreferences`, update `DEFAULT_WORKSPACE`, `parseWorkspace()`, and `frontend/lib/types.ts`.
 3. **Domain Boundary**: Prefer adding a new adapter behind an existing protocol over changing domain models. Keep calculations pure and deterministic.
+
+## 6. October 3 update: TOS studies, flicker-free chart, news (`claude/eloquent-planck-rf4dd4`)
+
+Supersedes the toolbar/HUD details in section 3C.
+
+- **Studies** (`frontend/lib/indicators.ts`, tested in `scripts/test-indicators.mjs`): thinkorswim
+  VWAP with volume-weighted ±σ bands (day/week/month reset on the New York date; the cut-off
+  first period of the loaded window is not drawn), MovingAvgCrossover SMA 15/30, Momentum(12)
+  zero-cross, Wilder RSI(14), EMA 18/50. Defaults and lengths live in `WorkspacePreferences`.
+- **Chart** (`market-chart-terminal.tsx`): structure is rebuilt only for ticker, timeframe or pane
+  changes; refreshes call `setData`. Momentum/RSI use Lightweight Charts panes. Chart times are
+  New York wall-clock encoded as UTC, so day/month tick marks follow ET sessions. Crossover arrows
+  mark completed bars only. The on-chart target HUD and toggle buttons were replaced by a
+  **Studies** menu, a crosshair legend, signal chips and a `LAST` trade line.
+- **Workspace**: right column with `KeyLevelsCard` (levels sorted around spot) and `NewsFeed`.
+- **News**: `GET /api/v1/news?symbols=&limit=` reads Alpaca (Benzinga) headlines, ordered by
+  publication time, with a 30s shared cache. Markup is stripped and non-http links dropped.
+  Context only.
+- **Data**: optional `PricePoint.vwap` carries Alpaca's per-bar VWAP for chart bars.
+- **Running locally**: `./run.sh --demo` or `.\run.ps1 -Demo` (Windows) serves labelled demo data
+  without keys; `REGIMESHIFT_ALLOW_DEMO_DATA` only works under `next dev`.
+- **Open items**: price-axis label collisions between context levels, folding Portfolio into the
+  dock, RTH-only VWAP option, alerts on confirmed crosses, Alpaca news WebSocket, economic
+  calendar, multi-chart layout.

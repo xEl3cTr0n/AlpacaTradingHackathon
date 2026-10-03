@@ -118,6 +118,9 @@ class PricePoint(BaseModel):
     open: float | None = None
     high: float | None = None
     low: float | None = None
+    # Exchange-reported bar VWAP when the feed supplies it (Alpaca bars do).
+    # Session VWAP bands weight by it; absent values fall back to HLC/3.
+    vwap: float | None = None
 
 
 class RegimeMetrics(BaseModel):
@@ -591,6 +594,26 @@ class ChartSnapshot(BaseModel):
     source: str
     bars: list[PricePoint]
     volume_rsi_signals: list[VolumeRsiReading] = Field(default_factory=list)
+
+
+class NewsArticle(BaseModel):
+    id: str
+    headline: str
+    summary: str = ""
+    source: str
+    author: str = ""
+    url: str | None = None
+    symbols: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class NewsSnapshot(BaseModel):
+    generated_at: datetime
+    source: str
+    symbols: list[str] = Field(default_factory=list)
+    articles: list[NewsArticle] = Field(default_factory=list)
+    read_only: bool = True
 
 
 class IvLevels(BaseModel):

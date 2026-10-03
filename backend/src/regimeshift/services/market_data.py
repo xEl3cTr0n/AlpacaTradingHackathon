@@ -223,6 +223,7 @@ class AlpacaMarketDataProvider:
                 low=float(bar.low),
                 close=float(bar.close),
                 volume=int(bar.volume),
+                vwap=float(bar.vwap) if getattr(bar, "vwap", None) else None,
             )
             for bar in bars[-limit:]
         ]

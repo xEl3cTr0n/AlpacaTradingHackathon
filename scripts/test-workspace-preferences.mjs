@@ -35,3 +35,11 @@ test("watchlist is deduplicated, bounded and supports intentionally empty lists"
   const many = Array.from({ length: 60 }, (_, i) => "A" + String.fromCharCode(65 + Math.floor(i / 26)) + String.fromCharCode(65 + i % 26));
   assert.equal(parseWorkspace(JSON.stringify({ watchlist: many })).watchlist.length, 40);
 });
+test("study settings keep thinkorswim defaults and reject unsafe lengths", () => {
+  assert.equal(DEFAULT_WORKSPACE.vwapDeviation, 2);
+  assert.deepEqual([DEFAULT_WORKSPACE.smaFast, DEFAULT_WORKSPACE.smaSlow, DEFAULT_WORKSPACE.momentumLength], [15, 30, 12]);
+  const next = mergeWorkspace(null, { smaFast: 9, smaSlow: 21, momentumLength: 10, vwapDeviation: 1.5, vwapAnchor: "week", showRsi: true, dock: "account", side: "news", newsScope: "market" });
+  assert.deepEqual([next.smaFast, next.smaSlow, next.momentumLength, next.vwapDeviation, next.vwapAnchor, next.showRsi, next.dock, next.side, next.newsScope], [9, 21, 10, 1.5, "week", true, "account", "news", "market"]);
+  const bad = parseWorkspace(JSON.stringify({ smaFast: 0, smaSlow: 2.5, momentumLength: 1e9, vwapDeviation: 7, vwapAnchor: "year", showVwap: "no", side: "admin", newsScope: 1 }));
+  assert.deepEqual(bad, DEFAULT_WORKSPACE);
+});
