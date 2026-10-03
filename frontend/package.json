@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "BUILD_DIR=$(mktemp -d) && npx tsc lib/chart-context.ts lib/feed-freshness.ts lib/scanner-filters.ts lib/workspace-preferences.ts --target es2022 --module commonjs --outDir \"$BUILD_DIR\" && WORKSPACE_TEST_BUILD_DIR=\"$BUILD_DIR\" CHART_TEST_BUILD_DIR=\"$BUILD_DIR\" SCANNER_TEST_BUILD_DIR=\"$BUILD_DIR\" node --test ../scripts/test-workspace-preferences.mjs ../scripts/test-feed-freshness.mjs ../scripts/test-chart-context.mjs ../scripts/test-scanner-filters.mjs && rm -rf \"$BUILD_DIR\""
+    "test": "BUILD_DIR=$(mktemp -d) && npx tsc lib/chart-context.ts lib/feed-freshness.ts lib/scanner-filters.ts lib/workspace-preferences.ts lib/indicators.ts --target es2022 --module commonjs --outDir \"$BUILD_DIR\" && WORKSPACE_TEST_BUILD_DIR=\"$BUILD_DIR\" CHART_TEST_BUILD_DIR=\"$BUILD_DIR\" SCANNER_TEST_BUILD_DIR=\"$BUILD_DIR\" INDICATOR_TEST_BUILD_DIR=\"$BUILD_DIR\" node --test ../scripts/test-workspace-preferences.mjs ../scripts/test-feed-freshness.mjs ../scripts/test-chart-context.mjs ../scripts/test-scanner-filters.mjs ../scripts/test-indicators.mjs && rm -rf \"$BUILD_DIR\""
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

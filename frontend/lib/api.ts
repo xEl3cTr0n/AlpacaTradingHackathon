@@ -15,6 +15,10 @@ const apiUrl =
   process.env.BACKEND_URL ?? process.env.REGIMESHIFT_API_URL ?? "http://127.0.0.1:8000";
 
 const syntheticSource = /demo|synthetic|fallback/i;
+// Development-only opt-in for machines without Alpaca keys. Production builds
+// never accept synthetic data, and the UI still labels every demo source.
+const allowDemoData =
+  process.env.NODE_ENV === "development" && process.env.REGIMESHIFT_ALLOW_DEMO_DATA === "true";
 
 async function responseJson<T>(response: Response, label: string): Promise<T> {
   if (!response.ok) {
@@ -25,7 +29,7 @@ async function responseJson<T>(response: Response, label: string): Promise<T> {
 }
 
 function requireLiveSource(label: string, source: string): void {
-  if (syntheticSource.test(source)) throw new Error(`${label} returned non-live data.`);
+  if (!allowDemoData && syntheticSource.test(source)) throw new Error(`${label} returned non-live data.`);
 }
 
 export async function fetchSnapshot(symbol = "SPY"): Promise<DecisionSnapshot> {

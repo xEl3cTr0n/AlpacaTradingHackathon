@@ -32,6 +32,8 @@ export interface PricePoint {
   open?: number | null;
   high?: number | null;
   low?: number | null;
+  /** Exchange-reported bar VWAP when the feed supplies it. */
+  vwap?: number | null;
 }
 
 export interface AgentVerdict {
@@ -314,6 +316,26 @@ export interface ChartSnapshot {
   source: string;
   bars: PricePoint[];
   volume_rsi_signals?: VolumeRsiReading[];
+}
+
+export interface NewsArticle {
+  id: string;
+  headline: string;
+  summary: string;
+  source: string;
+  author: string;
+  url?: string | null;
+  symbols: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewsSnapshot {
+  generated_at: string;
+  source: string;
+  symbols: string[];
+  articles: NewsArticle[];
+  read_only: true;
 }
 
 export interface IvLevels {

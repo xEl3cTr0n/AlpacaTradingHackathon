@@ -20,6 +20,7 @@ from regimeshift.domain.models import (
     ManualTradePreview,
     ManualTradeRequest,
     ManualTradeResult,
+    NewsSnapshot,
     OptionChainSnapshot,
     OptionsThesisSnapshot,
     PlatformSnapshot,
@@ -36,6 +37,7 @@ from regimeshift.services.chart_context import get_chart_context
 from regimeshift.services.live_tape import get_live_tick
 from regimeshift.services.manual_trading import ManualPaperTrader
 from regimeshift.services.market_data import MarketDataProvider, build_market_data_provider
+from regimeshift.services.news import get_news
 from regimeshift.services.options_data import build_options_provider
 from regimeshift.services.platform import build_platform_provider
 from regimeshift.services.sector_scanner import get_sector_scan
@@ -200,6 +202,25 @@ def chart(
         logger.exception("Chart data request failed")
         raise HTTPException(
             status_code=502, detail="Chart data request failed; retry shortly"
+        ) from error
+
+
+@app.get("/api/v1/news", response_model=NewsSnapshot)
+def news(
+    settings: SettingsDependency,
+    symbols: str = Query(default="", max_length=120, pattern=r"^[A-Za-z.,]*$"),
+    limit: int = Query(default=25, ge=1, le=50),
+) -> NewsSnapshot:
+    """Read-only headlines. Empty symbols returns the market-wide feed."""
+    requested = [item.strip().upper() for item in symbols.split(",") if item.strip()]
+    if len(requested) > 10 or any(len(item) > 10 for item in requested):
+        raise HTTPException(status_code=422, detail="Request at most 10 valid tickers")
+    try:
+        return get_news(settings, requested, limit)
+    except Exception as error:
+        logger.exception("News request failed")
+        raise HTTPException(
+            status_code=502, detail="News feed unavailable; retry shortly"
         ) from error
 
 

@@ -11,6 +11,10 @@ import type { DecisionSnapshot, PlatformSnapshot, ScannerSnapshot } from "@/lib/
 import { ScannerFilterBar } from "./scanner-workbench";
 import { TradingDock } from "./trading-dock";
 import { SectorDetail, SectorRail } from "./sector-scanner";
+import { ChartContextPanel } from "./chart-context-panel";
+import { KeyLevelsCard } from "./key-levels-card";
+import { NewsFeed } from "./news-feed";
+import { useChartContext } from "@/lib/use-chart-context";
 
 const MarketChartTerminal = dynamic(() => import("./market-chart-terminal").then((m) => m.MarketChartTerminal), {
   ssr: false, loading: () => <div className="chart-placeholder">Loading chart workspace…</div>,
@@ -28,6 +32,7 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
   onOpenResearch: () => void; platform: PlatformSnapshot | null; accountError: boolean; onRefreshAccount: () => void;
 }) {
   const [preferences, updatePreferences] = useWorkspacePreferences();
+  const { context, failed: contextFailed, loading: contextLoading, refresh: refreshContext } = useChartContext(symbol);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sector, setSector] = useState("XLK");
   const [message, setMessage] = useState("");
@@ -76,7 +81,7 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
 
   return <div className="terminal-workspace focused-workspace">
     <h1 className="sr-only">Trade workspace</h1>
-    <div className="terminal-grid">
+    <div className="terminal-grid with-side">
       <aside className="opportunity-rail" aria-label="Ticker watchlist and scanner">
         <nav className="rail-tabs" aria-label="Ticker list">{(["scanner", "watchlist", "sectors"] as const).map((tab) => <button key={tab} type="button" aria-pressed={preferences.rail === tab} className={preferences.rail === tab ? "active" : ""} onClick={() => updatePreferences({ rail: tab })}>{tab === "scanner" ? "Scanner" : tab === "sectors" ? "Sectors" : "Watchlist"}</button>)}</nav>
         {preferences.rail === "sectors" ? <SectorRail selected={sector} onSelect={(next) => { setSector(next); selectSymbol(next); }} /> : <>
@@ -122,7 +127,12 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
           {message && <p className="run-status" role="status">{message}</p>}
         </section>
         <TradingDock symbol={symbol} onSymbolChange={selectSymbol} platform={platform} accountError={accountError} onRefreshAccount={onRefreshAccount} />
+        <ChartContextPanel symbol={symbol} context={context} loading={contextLoading} failed={contextFailed} onRetry={refreshContext} />
       </div>
+      <aside className="workspace-side" aria-label={symbol + " levels and news"}>
+        <KeyLevelsCard symbol={symbol} context={context} loading={contextLoading} failed={contextFailed} />
+        <NewsFeed symbol={symbol} onSymbolChange={selectSymbol} />
+      </aside>
     </div>
     <dialog ref={filterDialog} className="scanner-filter-dialog" aria-labelledby="filter-dialog-title">
       <div className="dialog-heading"><h2 id="filter-dialog-title">Scanner filters</h2><button type="button" onClick={() => filterDialog.current?.close()} aria-label="Close scanner filters"><X size={18} aria-hidden="true" /></button></div>
