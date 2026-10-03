@@ -127,7 +127,7 @@ export function TradingWorkspace({ snapshot, initialScanner, symbol, onSymbolCha
           {message && <p className="run-status" role="status">{message}</p>}
         </section>
         <TradingDock symbol={symbol} onSymbolChange={selectSymbol} platform={platform} accountError={accountError} onRefreshAccount={onRefreshAccount} />
-        <ChartContextPanel symbol={symbol} context={context} loading={contextLoading} failed={contextFailed} onRetry={refreshContext} />
+        <div className="market-terminal compact-chart"><ChartContextPanel symbol={symbol} context={context} loading={contextLoading} failed={contextFailed} onRetry={refreshContext} /></div>
       </div>
       <aside className="workspace-side" aria-label={symbol + " levels and news"}>
         <KeyLevelsCard symbol={symbol} context={context} loading={contextLoading} failed={contextFailed} />

@@ -1242,11 +1242,14 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
 .compact-chart .chart-view-actions { margin-left: auto; flex-wrap: wrap; }
 .chart-select { min-height: 38px; padding: 0 4px 0 9px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-muted); font: 600 9px var(--font-mono), monospace; text-transform: uppercase; }
 .chart-select select { min-height: 34px; border: 0; background: transparent; color: var(--text-soft); font: 600 11px var(--font-mono), monospace; }
-.study-menu { position: relative; }
+/* The panel anchors to the full-width toolbar, not the button, so it never
+   opens off-screen when the toolbar wraps on tablets and phones. */
+.chart-terminal-toolbar { position: relative; }
+.study-menu { position: static; }
 .study-menu > summary { min-height: 38px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; list-style: none; border: 1px solid var(--border-bright); border-radius: 6px; background: var(--muted); color: var(--text); font: 650 10px var(--font-mono), monospace; text-transform: uppercase; cursor: pointer; }
 .study-menu > summary::-webkit-details-marker { display: none; }
 .study-menu[open] > summary { border-color: var(--cyan); color: var(--cyan); }
-.study-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: min(560px, calc(100vw - 32px)); padding: 12px 14px; display: grid; gap: 10px; border: 1px solid var(--border-bright); border-radius: 8px; background: #0b1222; box-shadow: 0 16px 40px rgba(0, 0, 0, .55); }
+.study-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: min(560px, 100%); box-sizing: border-box; padding: 12px 14px; display: grid; gap: 10px; border: 1px solid var(--border-bright); border-radius: 8px; background: #0b1222; box-shadow: 0 16px 40px rgba(0, 0, 0, .55); }
 .study-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-bottom: 9px; border-bottom: 1px solid rgba(38, 51, 76, .6); }
 .study-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font: 500 12px var(--font-sans), sans-serif; }
 .study-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--cyan); }
@@ -1289,9 +1292,15 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 1
 @media (max-width: 900px) {
   .terminal-grid.with-side .workspace-side { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 680px) {
+/* Match the focused workspace's single-column phone layout. */
+@media (max-width: 760px) {
   .terminal-grid.with-side { grid-template-columns: minmax(0, 1fr); }
   .terminal-grid.with-side .workspace-side { grid-column: auto; }
+}
+/* Indicator panes add height instead of shrinking the price pane. */
+.compact-chart .trading-chart { height: calc(clamp(340px, 49dvh, 650px) + var(--chart-panes) * 110px); }
+@media (max-width: 760px) {
+  .compact-chart .trading-chart { height: calc(350px + var(--chart-panes) * 90px); }
 }
 @media (min-width: 1481px) {
   .workspace-side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }

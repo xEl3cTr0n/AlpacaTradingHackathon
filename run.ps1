@@ -36,6 +36,10 @@ foreach ($port in 8000, 3000) {
         ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
 }
 
+# Remember the caller's values: a script started as .\run.ps1 shares the
+# shell's environment, and demo mode must not leak into the next live run.
+$savedMode = $env:MARKET_DATA_MODE
+$savedAllowDemo = $env:REGIMESHIFT_ALLOW_DEMO_DATA
 if ($Demo) {
     # Child processes inherit these; they override values in .env.
     $env:MARKET_DATA_MODE = "demo"
@@ -68,4 +72,6 @@ finally {
     Write-Host "Shutting down backend..."
     # /T also stops the uvicorn reload worker that holds port 8000.
     & taskkill /PID $backendProcess.Id /T /F *> $null
+    $env:MARKET_DATA_MODE = $savedMode
+    $env:REGIMESHIFT_ALLOW_DEMO_DATA = $savedAllowDemo
 }

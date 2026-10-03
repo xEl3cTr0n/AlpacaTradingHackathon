@@ -92,16 +92,24 @@ export function periodKey(timestamp: string, anchor: VwapAnchor): number {
   return anchor === "week" ? Math.floor((days + 4) / 7) : days;
 }
 
-export interface VwapBands { vwap: Series; deviation: Series; upper: Series; lower: Series }
+export interface VwapBands {
+  vwap: Series; deviation: Series; upper: Series; lower: Series;
+  /** The latest period may have begun before the first loaded bar. */
+  startsBeforeWindow: boolean;
+}
 
 /**
  * thinkorswim VWAP study: volume-weighted mean of each bar's VWAP since the
  * period rolled, with bands at ±`deviations` volume-weighted standard
  * deviations. Bars without a feed VWAP fall back to HLC/3.
+ *
+ * Bars load by count, so the oldest period in the window is usually cut off.
+ * It is left blank rather than drawn from an arbitrary bar. When the window
+ * holds a single period it is drawn, flagged `startsBeforeWindow`.
  */
 export function vwapBands(bars: Bar[], deviations = 2, anchor: VwapAnchor = "day"): VwapBands {
   const n = bars.length;
-  const result: VwapBands = { vwap: new Array(n).fill(null), deviation: new Array(n).fill(null), upper: new Array(n).fill(null), lower: new Array(n).fill(null) };
+  const result: VwapBands = { vwap: new Array(n).fill(null), deviation: new Array(n).fill(null), upper: new Array(n).fill(null), lower: new Array(n).fill(null), startsBeforeWindow: false };
   let period: number | null = null, volume = 0, pv = 0, pv2 = 0;
   for (let i = 0; i < n; i++) {
     const bar = bars[i];
@@ -111,12 +119,19 @@ export function vwapBands(bars: Bar[], deviations = 2, anchor: VwapAnchor = "day
     volume += bar.volume; pv += bar.volume * price; pv2 += bar.volume * price * price;
     if (volume <= 0) continue;
     const mean = pv / volume;
-    const deviation = Math.sqrt(Math.max(pv2 / volume - mean * mean, 0));
+    const variance = pv2 / volume - mean * mean;
+    // E[p²]−mean² cancels to float noise (~1e-6) for a lone bar; treat that as zero.
+    const deviation = variance > (mean * 1e-7) ** 2 ? Math.sqrt(variance) : 0;
     result.vwap[i] = mean;
     result.deviation[i] = deviation;
     result.upper[i] = mean + deviations * deviation;
     result.lower[i] = mean - deviations * deviation;
   }
+  if (!n) return result;
+  const first = periodKey(bars[0].timestamp, anchor);
+  const firstEnd = bars.findIndex((bar) => periodKey(bar.timestamp, anchor) !== first);
+  if (firstEnd === -1) result.startsBeforeWindow = true;
+  else for (const series of [result.vwap, result.deviation, result.upper, result.lower]) series.fill(null, 0, firstEnd);
   return result;
 }
 
@@ -183,18 +198,33 @@ export function signalReadout(bars: Bar[], studies: StudyValues, settings: Study
   const last = bars.length - 1;
   if (last < 0) return [];
   const chips: SignalChip[] = [];
-  const ago = (cross?: Cross) => cross == null ? "no cross in view"
-    : cross.index === forming ? "crossing on forming bar · unconfirmed"
-    : `crossed ${last - cross.index === 0 ? "this bar" : `${last - cross.index} bars ago`}`;
+  const ago = (cross?: Cross) => {
+    if (cross == null) return "no cross in view";
+    if (cross.index === forming) return "crossing on forming bar · unconfirmed";
+    const bars = last - cross.index;
+    return bars === 0 ? "crossed this bar" : `crossed ${bars} bar${bars === 1 ? "" : "s"} ago`;
+  };
   const vwap = studies.vwap?.vwap[last], dev = studies.vwap?.deviation[last];
   if (vwap != null && dev != null) {
-    const z = dev > 0 ? (bars[last].close - vwap) / dev : 0;
-    const stretched = Math.abs(z) >= settings.vwapDeviation;
-    chips.push({
-      id: "vwap", label: `VWAP ${z >= 0 ? "+" : ""}${z.toFixed(1)}σ`,
-      detail: `${stretched ? "Outside" : "Inside"} ±${settings.vwapDeviation}σ band · ${studies.vwapAnchor} anchor · VWAP ${vwap.toFixed(2)}`,
-      tone: stretched ? "neutral" : z >= 0 ? "bull" : "bear",
-    });
+    const close = bars[last].close;
+    const caveat = studies.vwap?.startsBeforeWindow ? " · period starts before loaded bars, add bars for exact VWAP" : "";
+    if (dev === 0) {
+      // One bar into the period: no spread yet, so report distance instead of σ.
+      const pct = (close / vwap - 1) * 100;
+      chips.push({
+        id: "vwap", label: `VWAP ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+        detail: `Bands form after the first bar of the ${studies.vwapAnchor} · VWAP ${vwap.toFixed(2)}${caveat}`,
+        tone: pct > 0 ? "bull" : pct < 0 ? "bear" : "neutral",
+      });
+    } else {
+      const z = (close - vwap) / dev;
+      const stretched = Math.abs(z) >= settings.vwapDeviation;
+      chips.push({
+        id: "vwap", label: `VWAP ${z >= 0 ? "+" : ""}${z.toFixed(1)}σ`,
+        detail: `${stretched ? "Outside" : "Inside"} ±${settings.vwapDeviation}σ band · ${studies.vwapAnchor} anchor · VWAP ${vwap.toFixed(2)}${caveat}`,
+        tone: stretched ? "neutral" : z >= 0 ? "bull" : "bear",
+      });
+    }
   }
   const fast = studies.smaFast?.[last], slow = studies.smaSlow?.[last];
   if (fast != null && slow != null) {
@@ -208,8 +238,8 @@ export function signalReadout(bars: Bar[], studies: StudyValues, settings: Study
   const mom = studies.momentum?.[last];
   if (mom != null) {
     chips.push({
-      id: "momentum", label: `MOM(${settings.momentumLength}) ${mom >= 0 ? "+" : ""}${mom.toFixed(2)}`,
-      detail: `${mom >= 0 ? "Above" : "Below"} zero · ${ago(studies.momentumCrosses.at(-1))}`,
+      id: "momentum", label: `MOM(${settings.momentumLength}) ${mom > 0 ? "+" : ""}${mom.toFixed(2)}`,
+      detail: `${mom > 0 ? "Above zero" : mom < 0 ? "Below zero" : "At zero"} · ${ago(studies.momentumCrosses.at(-1))}`,
       tone: mom > 0 ? "bull" : mom < 0 ? "bear" : "neutral",
     });
   }

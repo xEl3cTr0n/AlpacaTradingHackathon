@@ -31,17 +31,34 @@ test("crosses needs the prior bar at or through the reference", () => {
 
 test("VWAP bands weight bar VWAP by volume and reset on the New York date", () => {
   const bars = [
+    bar("2026-09-30T19:00:00Z", 1, 100, { vwap: 1 }), // older, cut-off period
     bar("2026-10-01T14:00:00Z", 99, 100, { vwap: 10 }),
     bar("2026-10-02T01:00:00Z", 99, 300, { vwap: 12 }), // 21:00 ET, still Oct 1
     bar("2026-10-02T13:35:00Z", 50, 200, { vwap: 20 }),
   ];
   const v = ind.vwapBands(bars, 2, "day");
-  close(v.vwap[1], 11.5);
-  close(v.deviation[1], Math.sqrt(0.75));
-  close(v.upper[1], 11.5 + 2 * Math.sqrt(0.75));
-  close(v.lower[1], 11.5 - 2 * Math.sqrt(0.75));
-  close(v.vwap[2], 20);
-  close(v.deviation[2], 0);
+  assert.equal(v.vwap[0], null); // the first loaded period is partial, so it is not drawn
+  assert.equal(v.startsBeforeWindow, false);
+  close(v.vwap[2], 11.5);
+  close(v.deviation[2], Math.sqrt(0.75));
+  close(v.upper[2], 11.5 + 2 * Math.sqrt(0.75));
+  close(v.lower[2], 11.5 - 2 * Math.sqrt(0.75));
+  close(v.vwap[3], 20);
+  assert.equal(v.deviation[3], 0);
+});
+
+test("a lone bar has exactly zero deviation and the readout uses % distance", () => {
+  const bars = [
+    bar("2026-09-30T19:00:00Z", 400, 100, { vwap: 400 }),
+    bar("2026-10-01T15:00:00Z", 403.86, 966440, { vwap: 407.9393 }),
+  ];
+  const settings = { showVwap: true, vwapDeviation: 2, vwapAnchor: "day", showSmaCross: false, smaFast: 15, smaSlow: 30, showMomentum: false, momentumLength: 12, showEma: false, showRsi: false };
+  const studies = ind.computeStudies(bars, settings, "5Min");
+  assert.equal(studies.vwap.deviation[1], 0);
+  const [chip] = ind.signalReadout(bars, studies, settings, null);
+  assert.equal(chip.label, "VWAP -1.00%");
+  assert.equal(chip.tone, "bear");
+  assert.match(chip.detail, /Bands form after the first bar/);
 });
 
 test("VWAP falls back to HLC/3 and weekly anchors roll on Sunday", () => {
@@ -74,6 +91,17 @@ test("signal readout reports confirmed and unconfirmed crosses honestly", () => 
   assert.deepEqual(confirmed.map((c) => c.id), ["vwap", "sma", "momentum"]);
   assert.match(confirmed[1].detail, /crossed this bar/);
   assert.match(ind.signalReadout(bars, studies, settings, 4)[1].detail, /unconfirmed/);
+  assert.equal(studies.vwap.startsBeforeWindow, true); // one period in view
+  assert.match(confirmed[0].detail, /period starts before loaded bars/);
   assert.equal(studies.ema18, null);
   assert.deepEqual(ind.signalReadout([], studies, settings, null), []);
+});
+
+test("readout wording handles zero momentum and a single bar", () => {
+  const settings = { showVwap: false, vwapDeviation: 2, vwapAnchor: "day", showSmaCross: false, smaFast: 15, smaSlow: 30, showMomentum: true, momentumLength: 1, showEma: false, showRsi: false };
+  const flat = [3, 1, 3, 3].map((p, i) => bar(`2026-10-02T14:${String(i * 5).padStart(2, "0")}:00Z`, p));
+  const atZero = ind.signalReadout(flat, ind.computeStudies(flat, settings, "5Min"), settings, null)[0];
+  assert.equal(atZero.label, "MOM(1) 0.00");
+  assert.match(atZero.detail, /^At zero · crossed 1 bar ago$/);
+  assert.equal(atZero.tone, "neutral");
 });

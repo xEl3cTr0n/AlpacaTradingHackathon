@@ -27,6 +27,7 @@ import type { ChartSnapshot, DecisionSnapshot, LiveMarketTick, PricePoint } from
 import { chartContextLevels } from "@/lib/chart-context";
 import {
   computeStudies,
+  effectiveVwapAnchor,
   formingBarIndex,
   signalReadout,
   type Series,
@@ -66,18 +67,30 @@ const liveFetcher = async (url: string): Promise<LiveMarketTick> => {
   return response.json() as Promise<LiveMarketTick>;
 };
 
-const toTime = (timestamp: string): UTCTimestamp =>
-  Math.floor(new Date(timestamp).getTime() / 1000) as UTCTimestamp;
-
-// Axis and crosshair labels in exchange time, not UTC.
+// Lightweight Charts places day/month tick marks on UTC calendar boundaries.
+// Chart times are therefore New York wall-clock time encoded as UTC, so marks
+// land on ET sessions year-round; chart-side labels format in UTC to match.
+const etParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+const toTime = (timestamp: string): UTCTimestamp => {
+  const p: Record<string, number> = {};
+  for (const part of etParts.formatToParts(new Date(timestamp))) if (part.type !== "literal") p[part.type] = Number(part.value);
+  return (Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) / 1000) as UTCTimestamp;
+};
+const wall = { timeZone: "UTC" } as const;
+const wallClock = new Intl.DateTimeFormat("en-US", { ...wall, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const wallDay = new Intl.DateTimeFormat("en-US", { ...wall, month: "short", day: "numeric" });
+const wallMonth = new Intl.DateTimeFormat("en-US", { ...wall, month: "short" });
+const wallYear = new Intl.DateTimeFormat("en-US", { ...wall, year: "numeric" });
+const wallStamp = new Intl.DateTimeFormat("en-US", { ...wall, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const wallDate = new Intl.DateTimeFormat("en-US", { ...wall, month: "short", day: "numeric", year: "numeric" });
+const asDate = (time: Time) => new Date((time as number) * 1000);
+// Real instants (ISO strings) shown in exchange time.
 const zone = { timeZone: "America/New_York" } as const;
-const etClock = new Intl.DateTimeFormat("en-US", { ...zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const etDay = new Intl.DateTimeFormat("en-US", { ...zone, month: "short", day: "numeric" });
-const etMonth = new Intl.DateTimeFormat("en-US", { ...zone, month: "short" });
-const etYear = new Intl.DateTimeFormat("en-US", { ...zone, year: "numeric" });
 const etStamp = new Intl.DateTimeFormat("en-US", { ...zone, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const etDate = new Intl.DateTimeFormat("en-US", { ...zone, month: "short", day: "numeric", year: "numeric" });
-const asDate = (time: Time) => new Date((time as number) * 1000);
 
 function ichimoku(points: PricePoint[]) {
   const tenkanData: { time: UTCTimestamp; value: number }[] = [];
@@ -312,11 +325,12 @@ export function MarketChartTerminal({
   const overlayLevels = useMemo(() => {
     if (!preferences.showLevels && !preferences.showTargets) return [];
     const isTarget = (title: string) => /Session|Weekly|Extreme|Prior Day/.test(title);
+    // Only a day-anchored intraday VWAP study duplicates the session VWAP level.
+    const studyDrawsSessionVwap = preferences.showVwap && effectiveVwapAnchor(preferences.vwapAnchor, timeframe) === "day";
     return chartContextLevels(context).filter((level) =>
-      // The VWAP study already draws the session VWAP with its bands.
-      !(preferences.showVwap && level.title === "Session VWAP")
+      !(studyDrawsSessionVwap && level.title === "Session VWAP")
       && (isTarget(level.title) ? preferences.showTargets : preferences.showLevels));
-  }, [context, preferences.showLevels, preferences.showTargets, preferences.showVwap]);
+  }, [context, preferences.showLevels, preferences.showTargets, preferences.showVwap, preferences.vwapAnchor, timeframe]);
 
   const bars = useMemo(
     () => data?.bars ?? (timeframe === "1Day" && chartSymbol === snapshot.market.symbol ? snapshot.market.prices : []),
@@ -339,6 +353,9 @@ export function MarketChartTerminal({
   const layoutKey = [preferences.showVwap, preferences.showSmaCross, preferences.showEma, preferences.showMomentum,
     preferences.showRsi, preferences.showIchimoku].map(Number).join("");
   const viewKey = `${chartSymbol}:${timeframe}:${candleLimit}`;
+  // Bars changes do not rebuild the chart, so cleanup reads the key from here.
+  const viewKeyRef = useRef(viewKey);
+  useEffect(() => { viewKeyRef.current = viewKey; }, [viewKey]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -362,7 +379,7 @@ export function MarketChartTerminal({
           vertLine: { color: "rgba(148, 163, 184, .45)", labelBackgroundColor: "#26334c" },
           horzLine: { color: "rgba(148, 163, 184, .45)", labelBackgroundColor: "#26334c" },
         },
-        localization: { timeFormatter: (time: Time) => (timeframe === "1Day" ? etDate : etStamp).format(asDate(time)) },
+        localization: { timeFormatter: (time: Time) => (timeframe === "1Day" ? wallDate : wallStamp).format(asDate(time)) },
         timeScale: {
           borderColor: "#26334c",
           timeVisible: timeframe !== "1Day",
@@ -370,10 +387,10 @@ export function MarketChartTerminal({
           rightOffset: 4,
           tickMarkFormatter: (time: Time, type: TickMarkType) => {
             const date = asDate(time);
-            if (type === TickMarkType.Year) return etYear.format(date);
-            if (type === TickMarkType.Month) return etMonth.format(date);
-            if (type === TickMarkType.DayOfMonth || timeframe === "1Day") return etDay.format(date);
-            return etClock.format(date);
+            if (type === TickMarkType.Year) return wallYear.format(date);
+            if (type === TickMarkType.Month) return wallMonth.format(date);
+            if (type === TickMarkType.DayOfMonth || timeframe === "1Day") return wallDay.format(date);
+            return wallClock.format(date);
           },
         },
       });
@@ -444,7 +461,7 @@ export function MarketChartTerminal({
     handlesRef.current = handles;
     return () => {
       const range = chart.timeScale().getVisibleLogicalRange();
-      if (range) savedRangeRef.current = { key: viewKey, range };
+      if (range) savedRangeRef.current = { key: viewKeyRef.current, range };
       chart.unsubscribeCrosshairMove(onCrosshair);
       resizeObserver.disconnect();
       handlesRef.current = null;
@@ -460,6 +477,10 @@ export function MarketChartTerminal({
     const handles = handlesRef.current;
     if (!handles) return;
     const times = bars.map((bar) => toTime(bar.timestamp));
+    // Wall-clock times repeat in the autumn DST hour on round-the-clock feeds;
+    // keep them strictly increasing as the chart requires.
+    for (let i = 1; i < times.length; i++) if (times[i] <= times[i - 1]) times[i] = (times[i - 1] + 1) as UTCTimestamp;
+    const known = new Set<number>(times);
     handles.times = new Map(times.map((time, index) => [time as number, index]));
     handles.candles.setData(bars.map((bar, i) => ({
       time: times[i], open: bar.open ?? bar.close, high: bar.high ?? bar.close, low: bar.low ?? bar.close, close: bar.close,
@@ -506,7 +527,7 @@ export function MarketChartTerminal({
       markers.push({ time: times[cross.index], position: up ? "belowBar" : "aboveBar", shape: up ? "arrowUp" : "arrowDown",
         color: up ? COLORS.smaFast : COLORS.smaSlow, text: up ? "MA↑" : "MA↓" });
     }
-    handles.candleMarkers.setMarkers(markers.sort((a, b) => (a.time as number) - (b.time as number)));
+    handles.candleMarkers.setMarkers(markers.filter((marker) => known.has(marker.time as number)).sort((a, b) => (a.time as number) - (b.time as number)));
     handles.momentumMarkers?.setMarkers(studies.momentumCrosses.filter((cross) => cross.index !== forming).map((cross) => {
       const up = cross.direction === "up";
       return { time: times[cross.index], position: up ? "belowBar" : "aboveBar", shape: up ? "arrowUp" : "arrowDown", color: up ? COLORS.up : COLORS.down };
@@ -583,7 +604,8 @@ export function MarketChartTerminal({
           <label className="chart-select" title="Candles of history to load">Bars<select value={candleLimit} onChange={(event) => updatePreferences({ candleLimit: Number(event.target.value) as typeof candleLimit })}>{([100, 300, 500, 1000] as const).map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           <button type="button" onClick={focusRecent} title="Focus on the most recent 120 candles">Recent</button>
           <button type="button" onClick={() => handlesRef.current?.chart.timeScale().fitContent()} title="Fit all loaded candles">Fit</button>
-          <label className="chart-select" title="Latest-trade polling interval">Quotes<select value={preferences.quoteSeconds} onChange={(event) => updatePreferences({ quoteSeconds: Number(event.target.value) as 0 | 1 | 5 | 10 })}><option value={0}>Paused</option><option value={1}>1s</option><option value={5}>5s</option><option value={10}>10s</option></select></label>
+          {/* The research view polls through its own tape controls. */}
+          {compact && <label className="chart-select" title="Latest-trade polling interval">Quotes<select value={preferences.quoteSeconds} onChange={(event) => updatePreferences({ quoteSeconds: Number(event.target.value) as 0 | 1 | 5 | 10 })}><option value={0}>Paused</option><option value={1}>1s</option><option value={5}>5s</option><option value={10}>10s</option></select></label>}
         </div>
       </div>
       {chips.length > 0 && <ul className="signal-strip" aria-label="Study readout on the latest bar">

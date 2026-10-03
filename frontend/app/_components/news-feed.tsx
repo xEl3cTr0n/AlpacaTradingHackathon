@@ -39,9 +39,10 @@ export function NewsFeed({ symbol, onSymbolChange }: { symbol: string; onSymbolC
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, []);
   const articles = data?.articles ?? [];
+  const newestLoaded = articles.reduce((max, article) => (article.created_at > max ? article.created_at : max), "");
   // Remember the newest headline from the first load of this feed; later
   // arrivals get a NEW mark until the operator refreshes.
-  if (articles[0] && seen?.url !== url) setSeen({ url, newest: articles[0].created_at });
+  if (newestLoaded && seen?.url !== url) setSeen({ url, newest: newestLoaded });
   const newestSeen = seen?.url === url ? seen.newest : null;
   const demo = data?.source.includes("demo");
 
@@ -50,7 +51,7 @@ export function NewsFeed({ symbol, onSymbolChange }: { symbol: string; onSymbolC
       <div className="segmented-mini" role="group" aria-label="News scope">
         {(["ticker", "market"] as const).map((item) => <button key={item} type="button" aria-pressed={scope === item} className={scope === item ? "active" : ""} onClick={() => updatePreferences({ newsScope: item })}>{item === "ticker" ? symbol : "Market"}</button>)}
       </div>
-      <button type="button" className="icon-action" onClick={() => { if (articles[0]) setSeen({ url, newest: articles[0].created_at }); void mutate(); }} disabled={isValidating} aria-label="Refresh headlines"><RefreshCw size={13} className={isValidating ? "spinning" : ""} aria-hidden="true" /></button>
+      <button type="button" className="icon-action" onClick={() => { if (newestLoaded) setSeen({ url, newest: newestLoaded }); void mutate(); }} disabled={isValidating} aria-label="Refresh headlines"><RefreshCw size={13} className={isValidating ? "spinning" : ""} aria-hidden="true" /></button>
     </div>
     {error && <p className="workspace-warning" role="alert">Headline refresh failed. Showing nothing rather than stale news.</p>}
     {demo && <p className="workspace-warning">Demo headlines — connect Alpaca for the real feed.</p>}

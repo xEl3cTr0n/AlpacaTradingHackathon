@@ -72,14 +72,17 @@ Open [http://localhost:3000](http://localhost:3000). API documentation is at
 On Windows, install Python and Node once with
 `winget install -e --id Python.Python.3.12` and
 `winget install -e --id OpenJS.NodeJS.LTS`, then open a new PowerShell window.
-Create the virtualenv with `py -3.12 -m venv .venv` and
-`.\.venv\Scripts\python -m pip install -e ".[dev]"`, run `npm.cmd install`
+In `backend`, create the virtualenv with `py -3.12 -m venv .venv` and
+`.\.venv\Scripts\python -m pip install -e ".[dev]"`. Run `npm.cmd install`
 in `frontend`, then start both servers from the repository root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run.ps1         # Alpaca keys from .env
 powershell -ExecutionPolicy Bypass -File .\run.ps1 -Demo   # no keys: labelled demo data
 ```
+
+Without Alpaca keys, `./run.sh --demo` (or `.\run.ps1 -Demo`) serves
+deterministic demo data that the UI labels as such. Production builds refuse it.
 
 If a dev server was running while `npm run build` rewrote `.next`, stop it with
 `Ctrl+C` and restart `npm run dev`; a stale Next process may otherwise hang.

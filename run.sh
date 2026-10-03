@@ -5,6 +5,11 @@
 # ==============================================================================
 
 set -euo pipefail
+# ./run.sh --demo serves labelled demo data for machines without Alpaca keys.
+if [ "${1:-}" = "--demo" ]; then
+    export MARKET_DATA_MODE=demo REGIMESHIFT_ALLOW_DEMO_DATA=true
+    echo "Demo mode: deterministic synthetic data, clearly labelled in the UI."
+fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 FRONTEND_DIR="$REPO_ROOT/frontend"

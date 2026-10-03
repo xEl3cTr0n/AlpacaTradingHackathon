@@ -89,6 +89,17 @@ def test_alpaca_news_strips_markup_and_unsafe_urls():
     assert articles[1].url is None
 
 
+def test_alpaca_news_orders_by_publication_not_edit_time():
+    early = datetime(2026, 10, 2, 10, 0, tzinfo=UTC)
+    late = datetime(2026, 10, 2, 10, 30, tzinfo=UTC)
+    edited = _article(id=1, created_at=early, updated_at=datetime(2026, 10, 2, 11, 0, tzinfo=UTC))
+    fresh = _article(id=2, created_at=late, updated_at=late)
+    provider = news.AlpacaNewsProvider.__new__(news.AlpacaNewsProvider)
+    provider.client = MagicMock()
+    provider.client.get_news.return_value = SimpleNamespace(data={"news": [edited, fresh]})
+    assert [a.id for a in provider.get_news([], 10)] == ["2", "1"]
+
+
 def test_news_cache_shares_one_upstream_read():
     calls = []
 

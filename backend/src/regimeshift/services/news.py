@@ -69,6 +69,8 @@ class AlpacaNewsProvider:
         news_set = self.client.get_news(request)
         data = getattr(news_set, "data", {})
         items = data.get("news", []) if isinstance(data, dict) else []
+        # Alpaca's sort key is updated_at; edited stories would jump the queue.
+        items = sorted(items, key=lambda item: item.created_at, reverse=True)
         return [
             NewsArticle(
                 id=str(item.id),
